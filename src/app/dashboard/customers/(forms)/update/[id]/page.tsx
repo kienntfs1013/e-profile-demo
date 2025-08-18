@@ -1,15 +1,12 @@
-import * as React from "react";
+import { users } from "@/models/user";
 
 import ClientPage from "./client-page";
 
-
-export const dynamicParams = false;
-
 export async function generateStaticParams() {
-	return [{ id: "demo" }];
+	return users.map((u) => ({ id: u.id }));
 }
 
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-	const { id } = await params;
+export default function Page({ params }: { params: { id: string } }) {
+	const { id } = params;
 	return <ClientPage id={id} />;
 }
