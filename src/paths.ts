@@ -7,8 +7,10 @@ export const paths = {
 	},
 	dashboard: {
 		overview: "/dashboard",
-		profile: "/dashboard/profile", 
-		training: "/dashboard/training", 
+		general: "/dashboard/general",
+		executive: "/dashboard/executive",
+		profile: "/dashboard/profile",
+		training: "/dashboard/training",
 		health: "/dashboard/health",
 		achievement: "/dashboard/achievement",
 		account: "/dashboard/account",
