@@ -28,8 +28,6 @@ type Initial = {
 
 export default function ClientPage({ initial }: { initial: Initial }): React.JSX.Element {
 	const sp = useSearchParams();
-
-	// Ưu tiên giá trị runtime (query) nếu có; nếu không thì dùng giá trị initial do server truyền xuống
 	const dGroup = sp.get("group") ?? initial.group;
 	const dRank = sp.get("rank") ?? initial.rank;
 	const dCity = sp.get("city") ?? initial.city;
@@ -49,27 +47,22 @@ export default function ClientPage({ initial }: { initial: Initial }): React.JSX
 							<InputLabel>Giải</InputLabel>
 							<OutlinedInput label="Giải" name="group" defaultValue={dGroup} />
 						</FormControl>
-
 						<FormControl fullWidth required>
 							<InputLabel>Hạng</InputLabel>
 							<OutlinedInput type="number" label="Hạng" name="rank" defaultValue={dRank} />
 						</FormControl>
-
 						<FormControl fullWidth required>
 							<InputLabel>Thành phố</InputLabel>
 							<OutlinedInput label="Thành phố" name="city" defaultValue={dCity} />
 						</FormControl>
-
 						<FormControl fullWidth required>
 							<InputLabel>Nội dung</InputLabel>
 							<OutlinedInput label="Nội dung" name="event" defaultValue={dEvent} />
 						</FormControl>
-
 						<FormControl fullWidth>
 							<InputLabel>Chi tiết</InputLabel>
 							<OutlinedInput label="Chi tiết" name="detail" defaultValue={dDetail} />
 						</FormControl>
-
 						<FormControl fullWidth required>
 							<InputLabel>Năm</InputLabel>
 							<OutlinedInput type="number" label="Năm" name="year" defaultValue={dYear} />

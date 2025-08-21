@@ -3,6 +3,7 @@
 import * as React from "react";
 import { MenuItem } from "@mui/material";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardHeader from "@mui/material/CardHeader";
 import Chip from "@mui/material/Chip";
@@ -13,6 +14,7 @@ import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
 import ListItemAvatar from "@mui/material/ListItemAvatar";
 import ListItemText from "@mui/material/ListItemText";
+import Stack from "@mui/material/Stack";
 import type { SxProps } from "@mui/material/styles";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -21,6 +23,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import { DotsThreeVerticalIcon } from "@phosphor-icons/react/dist/ssr/DotsThreeVertical";
+import { PencilSimple } from "@phosphor-icons/react/dist/ssr/PencilSimple";
 import dayjs from "dayjs";
 
 import "dayjs/locale/vi";
@@ -207,11 +210,109 @@ function LatestOrders({
 
 type ScoreSort = "none" | "score-desc" | "score-asc";
 
+type RatingKey = "excellent" | "good" | "improve";
+const ratingLabel: Record<RatingKey, string> = {
+	excellent: "Xuất sắc",
+	good: "Tốt",
+	improve: "Cần cải thiện",
+};
+const ratingColor: Record<RatingKey, "success" | "warning" | "error"> = {
+	excellent: "success",
+	good: "warning",
+	improve: "error",
+};
+
+type ReviewItem = { id: string; name: string; rating: RatingKey; note: string };
+
+function CoachReviewCard({ items, onChange }: { items: ReviewItem[]; onChange: (next: ReviewItem[]) => void }) {
+	const [editing, setEditing] = React.useState(false);
+	const [draft, setDraft] = React.useState<ReviewItem[]>(items);
+
+	React.useEffect(() => {
+		if (!editing) setDraft(items);
+	}, [items, editing]);
+
+	const setDraftItem = (id: string, patch: Partial<ReviewItem>) =>
+		setDraft((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+
+	return (
+		<Card>
+			<CardHeader title="Đánh giá chung của huấn luyện viên" />
+			<Divider />
+			<List>
+				{draft.map((it, idx) => (
+					<ListItem key={it.id} divider={idx < draft.length - 1} sx={{ alignItems: "stretch" }}>
+						<Box sx={{ width: "100%" }}>
+							<Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
+								<ListItemText primary={it.name} primaryTypographyProps={{ fontWeight: 600 }} />
+								{editing ? (
+									<TextField
+										select
+										size="small"
+										value={it.rating}
+										onChange={(e) => setDraftItem(it.id, { rating: e.target.value as RatingKey })}
+										sx={{ minWidth: 180 }}
+									>
+										<MenuItem value="excellent">{ratingLabel.excellent}</MenuItem>
+										<MenuItem value="good">{ratingLabel.good}</MenuItem>
+										<MenuItem value="improve">{ratingLabel.improve}</MenuItem>
+									</TextField>
+								) : (
+									<Chip label={ratingLabel[it.rating]} color={ratingColor[it.rating]} size="small" />
+								)}
+							</Stack>
+
+							<Box sx={{ mt: 1 }}>
+								{editing ? (
+									<TextField
+										fullWidth
+										size="small"
+										multiline
+										minRows={2}
+										placeholder="Nhận xét chi tiết…"
+										value={it.note}
+										onChange={(e) => setDraftItem(it.id, { note: e.target.value })}
+									/>
+								) : (
+									<ListItemText secondary={it.note || "—"} secondaryTypographyProps={{ color: "text.secondary" }} />
+								)}
+							</Box>
+						</Box>
+					</ListItem>
+				))}
+			</List>
+		</Card>
+	);
+}
+
 export default function Page(): React.JSX.Element {
 	const [sort, setSort] = React.useState<"newest" | "oldest">("newest");
 	const [scoreSort, setScoreSort] = React.useState<ScoreSort>("none");
 	const [date, setDate] = React.useState<string>(dayjs().format("YYYY-MM-DD"));
 	const [search, setSearch] = React.useState<string>("");
+
+	const [reviews, setReviews] = React.useState<ReviewItem[]>([
+		{ id: "r1", name: "Tư thế ngắm", rating: "good", note: "Ổn định, cần giữ vai thả lỏng hơn cuối loạt." },
+		{ id: "r2", name: "Kích hoạt cò", rating: "excellent", note: "Rất đều, hầu như không giật cò." },
+		{
+			id: "r3",
+			name: "Theo dõi sau bắn",
+			rating: "good",
+			note: "Giữ ngắm 1–1.5s sau phát bắn, tránh hạ súng quá sớm.",
+		},
+		{
+			id: "r4",
+			name: "Nhịp thở",
+			rating: "improve",
+			note: "Chưa đồng bộ với thời điểm bóp cò, cần tập thêm bài nín thở 6s.",
+		},
+		{
+			id: "r5",
+			name: "Tập trung tinh thần",
+			rating: "good",
+			note: "Giữ nhịp tốt, tránh nhìn bảng điểm sau từng phát.",
+		},
+	]);
 
 	const devices: Product[] = [
 		{
@@ -359,6 +460,10 @@ export default function Page(): React.JSX.Element {
 						<MenuItem value="score-asc">Thấp → Cao</MenuItem>
 					</TextField>
 				</Box>
+			</Grid>
+
+			<Grid size={{ xs: 12 }}>
+				<CoachReviewCard items={reviews} onChange={setReviews} />
 			</Grid>
 
 			<Grid size={{ lg: 4, md: 6, xs: 12 }}>

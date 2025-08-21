@@ -19,8 +19,8 @@ type Initial = {
 	time: string;
 	x: string;
 	y: string;
-	date: string; // ISO hoặc rỗng
-	status: string; // "pending" | ...
+	date: string;
+	status: string;
 };
 
 export default function ClientPage({ initial }: { initial: Initial }): React.JSX.Element {

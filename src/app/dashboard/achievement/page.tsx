@@ -2,12 +2,16 @@
 
 import * as React from "react";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import CardHeader from "@mui/material/CardHeader";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
+import List from "@mui/material/List";
+import ListItem from "@mui/material/ListItem";
+import ListItemText from "@mui/material/ListItemText";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
@@ -32,6 +36,7 @@ type Achievement = {
 	event: string;
 	detail: string;
 	year: number;
+	opponent?: string;
 };
 
 const ACHIEVEMENTS: Achievement[] = [
@@ -42,6 +47,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Women",
 		detail: "Qualification: 578, Final: 198.6",
 		year: 2024,
+		opponent: "Kim M.",
 	},
 	{
 		group: "OLYMPIC GAMES",
@@ -50,6 +56,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "25m Pistol Women",
 		detail: "Qualification: 587, Medal Match: 16",
 		year: 2024,
+		opponent: "Zhang L.",
 	},
 
 	{
@@ -59,6 +66,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Women",
 		detail: "Qualification: 579, Final: 175.6",
 		year: 2023,
+		opponent: "Lee S.",
 	},
 	{
 		group: "WORLD CHAMPIONSHIPS",
@@ -67,6 +75,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Mixed Team",
 		detail: "Qualification: 577",
 		year: 2023,
+		opponent: "Pair K.",
 	},
 	{
 		group: "WORLD CHAMPIONSHIPS",
@@ -75,6 +84,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Women",
 		detail: "Qualification: 577",
 		year: 2022,
+		opponent: "Singh P.",
 	},
 	{
 		group: "WORLD CHAMPIONSHIPS",
@@ -83,6 +93,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Mixed Team",
 		detail: "Qualification: 571",
 		year: 2022,
+		opponent: "Pair T.",
 	},
 
 	{
@@ -92,8 +103,17 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "25m Pistol Women",
 		detail: "Qualification: 587, Medal Match: 15",
 		year: 2025,
+		opponent: "Karpova A.",
 	},
-	{ group: "WORLD CUP", rank: 10, city: "Baku", event: "25m Pistol Women", detail: "Qualification: 584", year: 2024 },
+	{
+		group: "WORLD CUP",
+		rank: 10,
+		city: "Baku",
+		event: "25m Pistol Women",
+		detail: "Qualification: 584",
+		year: 2024,
+		opponent: "Sato R.",
+	},
 	{
 		group: "WORLD CUP",
 		rank: 10,
@@ -101,6 +121,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Mixed Team",
 		detail: "Qualification: 574",
 		year: 2024,
+		opponent: "Pair D.",
 	},
 	{
 		group: "WORLD CUP",
@@ -109,6 +130,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Mixed Team",
 		detail: "Qualification: 574",
 		year: 2025,
+		opponent: "Pair E.",
 	},
 	{
 		group: "WORLD CUP",
@@ -117,8 +139,17 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Women",
 		detail: "Qualification: 572",
 		year: 2024,
+		opponent: "Jang H.",
 	},
-	{ group: "WORLD CUP", rank: 21, city: "Munich", event: "25m Pistol Women", detail: "Qualification: 580", year: 2024 },
+	{
+		group: "WORLD CUP",
+		rank: 21,
+		city: "Munich",
+		event: "25m Pistol Women",
+		detail: "Qualification: 580",
+		year: 2024,
+		opponent: "Park N.",
+	},
 	{
 		group: "WORLD CUP",
 		rank: 27,
@@ -126,6 +157,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Women",
 		detail: "Qualification: 573",
 		year: 2025,
+		opponent: "Ivanova O.",
 	},
 	{
 		group: "WORLD CUP",
@@ -134,6 +166,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Women",
 		detail: "Qualification: 570",
 		year: 2024,
+		opponent: "Chen Y.",
 	},
 
 	{
@@ -143,6 +176,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "25m Pistol Women",
 		detail: "Qualification: 588, Medal Match: 23",
 		year: 2024,
+		opponent: "Gutierrez M.",
 	},
 	{
 		group: "OLYMPIC QUALIFICATION CHAMPIONSHIP",
@@ -151,6 +185,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Mixed Team",
 		detail: "Qualification: 573",
 		year: 2024,
+		opponent: "Pair B.",
 	},
 
 	{
@@ -160,6 +195,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Mixed Team",
 		detail: "Qualification: 580, Medal Matches: 17",
 		year: 2024,
+		opponent: "Pair J.",
 	},
 	{
 		group: "ASIAN CHAMPIONSHIPS",
@@ -168,6 +204,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Mixed Team",
 		detail: "Qualification: 576, Medal Matches: 12",
 		year: 2023,
+		opponent: "Pair Q.",
 	},
 	{
 		group: "ASIAN CHAMPIONSHIPS",
@@ -176,6 +213,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Women",
 		detail: "Qualification: 581, Final: 219.7",
 		year: 2023,
+		opponent: "Kang Y.",
 	},
 	{
 		group: "ASIAN CHAMPIONSHIPS",
@@ -184,6 +222,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Women",
 		detail: "Qualification: 571, Final Stage Elimination: 245.6",
 		year: 2023,
+		opponent: "Huang C.",
 	},
 	{
 		group: "ASIAN CHAMPIONSHIPS",
@@ -192,6 +231,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Mixed Team",
 		detail: "Qualification: 580",
 		year: 2023,
+		opponent: "Pair L.",
 	},
 	{
 		group: "ASIAN CHAMPIONSHIPS",
@@ -200,6 +240,7 @@ const ACHIEVEMENTS: Achievement[] = [
 		event: "10m Air Pistol Women",
 		detail: "Qualification: 572",
 		year: 2024,
+		opponent: "Ng K.",
 	},
 ];
 
@@ -214,17 +255,90 @@ const MEDALS = [
 	{ label: "Đồng", color: "#d58b73", value: 1 },
 ];
 
+type RatingKey = "excellent" | "good" | "improve";
+type ReviewItem = { id: string; name: string; rating: RatingKey; note: string };
+const ratingLabel: Record<RatingKey, string> = { excellent: "Xuất sắc", good: "Tốt", improve: "Cần cải thiện" };
+const ratingColor: Record<RatingKey, "success" | "warning" | "error"> = {
+	excellent: "success",
+	good: "warning",
+	improve: "error",
+};
+
+function CoachReviewCard({ items, onChange }: { items: ReviewItem[]; onChange: (next: ReviewItem[]) => void }) {
+	const [editing, setEditing] = React.useState(false);
+	const [draft, setDraft] = React.useState<ReviewItem[]>(items);
+	React.useEffect(() => {
+		if (!editing) setDraft(items);
+	}, [items, editing]);
+	const setItem = (id: string, patch: Partial<ReviewItem>) =>
+		setDraft((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+
+	return (
+		<Card>
+			<CardHeader title="Đánh giá chung của huấn luyện viên" />
+			<Divider />
+			<List sx={{ py: 0 }}>
+				{draft.map((it, idx) => (
+					<ListItem key={it.id} divider={idx < draft.length - 1} sx={{ alignItems: "stretch" }}>
+						<Box sx={{ width: "100%" }}>
+							<Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
+								<ListItemText primary={it.name} primaryTypographyProps={{ fontWeight: 600 }} />
+								{editing ? (
+									<TextField
+										select
+										size="small"
+										value={it.rating}
+										onChange={(e) => setItem(it.id, { rating: e.target.value as RatingKey })}
+										sx={{ minWidth: 180 }}
+									>
+										<MenuItem value="excellent">{ratingLabel.excellent}</MenuItem>
+										<MenuItem value="good">{ratingLabel.good}</MenuItem>
+										<MenuItem value="improve">{ratingLabel.improve}</MenuItem>
+									</TextField>
+								) : (
+									<Chip label={ratingLabel[it.rating]} color={ratingColor[it.rating]} size="small" />
+								)}
+							</Stack>
+							<Box sx={{ mt: 1 }}>
+								{editing ? (
+									<TextField
+										fullWidth
+										size="small"
+										multiline
+										minRows={2}
+										value={it.note}
+										onChange={(e) => setItem(it.id, { note: e.target.value })}
+										placeholder="Nhận xét chi tiết…"
+									/>
+								) : (
+									<ListItemText secondary={it.note || "—"} secondaryTypographyProps={{ color: "text.secondary" }} />
+								)}
+							</Box>
+						</Box>
+					</ListItem>
+				))}
+			</List>
+		</Card>
+	);
+}
+
 export default function Page(): React.JSX.Element {
 	const [q, setQ] = React.useState("");
+	const [opponent, setOpponent] = React.useState("");
 	const [group, setGroup] = React.useState<Group | "TẤT CẢ">("TẤT CẢ");
 	const [sortBy, setSortBy] = React.useState<"mới-nhất" | "cũ-nhất">("mới-nhất");
 	const [rankSort, setRankSort] = React.useState<"none" | "best" | "worst">("none");
+	const [reviews, setReviews] = React.useState<ReviewItem[]>([
+		{ id: "r1", name: "Tư thế ngắm", rating: "good", note: "Ổn định, kiểm soát vai tốt." },
+		{ id: "r2", name: "Kích hoạt cò", rating: "excellent", note: "Đều, không giật." },
+		{ id: "r3", name: "Theo dõi sau bắn", rating: "good", note: "Giữ ngắm >1s sau cò." },
+		{ id: "r4", name: "Nhịp thở", rating: "improve", note: "Cần đồng bộ với bóp cò." },
+		{ id: "r5", name: "Tập trung tinh thần", rating: "good", note: "Hạn chế xem điểm từng phát." },
+	]);
 
 	const rows = React.useMemo(() => {
 		let data = ACHIEVEMENTS.slice();
-
 		if (group !== "TẤT CẢ") data = data.filter((r) => r.group === group);
-
 		if (q.trim()) {
 			const s = q.toLowerCase();
 			data = data.filter(
@@ -232,10 +346,14 @@ export default function Page(): React.JSX.Element {
 					r.city.toLowerCase().includes(s) ||
 					r.event.toLowerCase().includes(s) ||
 					r.group.toLowerCase().includes(s) ||
-					String(r.year).includes(s)
+					String(r.year).includes(s) ||
+					(r.opponent || "").toLowerCase().includes(s)
 			);
 		}
-
+		if (opponent.trim()) {
+			const so = opponent.toLowerCase();
+			data = data.filter((r) => (r.opponent || "").toLowerCase().includes(so));
+		}
 		if (rankSort === "best") {
 			data.sort((a, b) => a.rank - b.rank || (sortBy === "mới-nhất" ? b.year - a.year : a.year - b.year));
 		} else if (rankSort === "worst") {
@@ -245,12 +363,15 @@ export default function Page(): React.JSX.Element {
 				sortBy === "mới-nhất" ? b.year - a.year || a.rank - b.rank : a.year - b.year || a.rank - b.rank
 			);
 		}
-
 		return data;
-	}, [q, group, sortBy, rankSort]);
+	}, [q, opponent, group, sortBy, rankSort]);
 
 	return (
 		<Grid container spacing={3}>
+			<Grid size={{ xs: 12 }}>
+				<CoachReviewCard items={reviews} onChange={setReviews} />
+			</Grid>
+
 			<Grid size={{ xs: 12, md: 6 }}>
 				<Card>
 					<CardHeader title="Xếp hạng thế giới" />
@@ -277,13 +398,7 @@ export default function Page(): React.JSX.Element {
 							{MEDALS.map((m) => (
 								<Stack key={m.label} alignItems="center" spacing={1}>
 									<span
-										style={{
-											width: 20,
-											height: 20,
-											borderRadius: 999,
-											display: "inline-block",
-											background: m.color,
-										}}
+										style={{ width: 20, height: 20, borderRadius: 999, display: "inline-block", background: m.color }}
 									/>
 									<Typography variant="body2">{m.label}</Typography>
 									<Chip label={m.value} size="small" />
@@ -299,7 +414,6 @@ export default function Page(): React.JSX.Element {
 					<CardHeader title="Thành tích thi đấu" />
 					<Divider />
 					<CardContent>
-						{/* BỘ LỌC — auto-fit để lấp kín chiều ngang */}
 						<Box
 							sx={{
 								display: "grid",
@@ -313,14 +427,7 @@ export default function Page(): React.JSX.Element {
 								alignItems: "center",
 							}}
 						>
-							<TextField
-								fullWidth
-								size="small"
-								label="Tìm kiếm"
-								value={q}
-								onChange={(e) => setQ(e.target.value)}
-							/>
-
+							<TextField fullWidth size="small" label="Tìm kiếm" value={q} onChange={(e) => setQ(e.target.value)} />
 							<TextField
 								fullWidth
 								select
@@ -336,7 +443,6 @@ export default function Page(): React.JSX.Element {
 								<MenuItem value="OLYMPIC QUALIFICATION CHAMPIONSHIP">OLYMPIC QUALIFICATION CHAMPIONSHIP</MenuItem>
 								<MenuItem value="ASIAN CHAMPIONSHIPS">ASIAN CHAMPIONSHIPS</MenuItem>
 							</TextField>
-
 							<TextField
 								fullWidth
 								select
@@ -348,7 +454,6 @@ export default function Page(): React.JSX.Element {
 								<MenuItem value="mới-nhất">Mới nhất</MenuItem>
 								<MenuItem value="cũ-nhất">Cũ nhất</MenuItem>
 							</TextField>
-
 							<TextField
 								fullWidth
 								select
@@ -369,6 +474,7 @@ export default function Page(): React.JSX.Element {
 									<TableCell>Hạng</TableCell>
 									<TableCell>Giải</TableCell>
 									<TableCell>Thành phố & nội dung</TableCell>
+									<TableCell>Đối thủ</TableCell>
 									<TableCell>Năm</TableCell>
 								</TableRow>
 							</TableHead>
@@ -388,12 +494,13 @@ export default function Page(): React.JSX.Element {
 												{r.detail}
 											</Typography>
 										</TableCell>
+										<TableCell>{r.opponent || "—"}</TableCell>
 										<TableCell>{r.year}</TableCell>
 									</TableRow>
 								))}
 								{rows.length === 0 && (
 									<TableRow>
-										<TableCell colSpan={4}>
+										<TableCell colSpan={5}>
 											<Typography align="center" color="text.secondary">
 												Không có dữ liệu phù hợp.
 											</Typography>

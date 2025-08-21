@@ -260,6 +260,107 @@ function LatestOrders({
 	);
 }
 
+/* ====== ĐÁNH GIÁ CỦA HLV ====== */
+type RatingKey = "excellent" | "good" | "improve";
+type ReviewItem = { id: string; name: string; rating: RatingKey; note: string };
+
+const ratingLabel: Record<RatingKey, string> = {
+	excellent: "Xuất sắc",
+	good: "Tốt",
+	improve: "Cần cải thiện",
+};
+const ratingColor: Record<RatingKey, "success" | "warning" | "error"> = {
+	excellent: "success",
+	good: "warning",
+	improve: "error",
+};
+
+function CoachReviewCard({ items, onChange }: { items: ReviewItem[]; onChange: (next: ReviewItem[]) => void }) {
+	const [editing, setEditing] = useState(false);
+	const [draft, setDraft] = useState<ReviewItem[]>(items);
+
+	React.useEffect(() => {
+		if (!editing) setDraft(items);
+	}, [items, editing]);
+
+	const setItem = (id: string, patch: Partial<ReviewItem>) =>
+		setDraft((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+
+	return (
+		<Card>
+			<CardHeader
+				title="Đánh giá chung của huấn luyện viên"
+				action={
+					!editing ? (
+						<Button size="small" variant="outlined" startIcon={<PencilSimple />} onClick={() => setEditing(true)}>
+							Sửa
+						</Button>
+					) : (
+						<Stack direction="row" spacing={1}>
+							<Button variant="outlined" onClick={() => setEditing(false)}>
+								Hủy
+							</Button>
+							<Button
+								variant="contained"
+								onClick={() => {
+									onChange(draft);
+									setEditing(false);
+								}}
+							>
+								Lưu
+							</Button>
+						</Stack>
+					)
+				}
+			/>
+			<Divider />
+			<List sx={{ py: 0 }}>
+				{draft.map((it, idx) => (
+					<ListItem key={it.id} divider={idx < draft.length - 1} sx={{ alignItems: "stretch" }}>
+						<Box sx={{ width: "100%" }}>
+							<Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
+								<ListItemText primary={it.name} primaryTypographyProps={{ fontWeight: 600 }} />
+								{editing ? (
+									<TextField
+										select
+										size="small"
+										value={it.rating}
+										onChange={(e) => setItem(it.id, { rating: e.target.value as RatingKey })}
+										sx={{ minWidth: 180 }}
+									>
+										<MenuItem value="excellent">{ratingLabel.excellent}</MenuItem>
+										<MenuItem value="good">{ratingLabel.good}</MenuItem>
+										<MenuItem value="improve">{ratingLabel.improve}</MenuItem>
+									</TextField>
+								) : (
+									<Chip label={ratingLabel[it.rating]} color={ratingColor[it.rating]} size="small" />
+								)}
+							</Stack>
+
+							<Box sx={{ mt: 1 }}>
+								{editing ? (
+									<TextField
+										fullWidth
+										size="small"
+										multiline
+										minRows={2}
+										placeholder="Nhận xét chi tiết…"
+										value={it.note}
+										onChange={(e) => setItem(it.id, { note: e.target.value })}
+									/>
+								) : (
+									<ListItemText secondary={it.note || "—"} secondaryTypographyProps={{ color: "text.secondary" }} />
+								)}
+							</Box>
+						</Box>
+					</ListItem>
+				))}
+			</List>
+		</Card>
+	);
+}
+/* ====== /ĐÁNH GIÁ CỦA HLV ====== */
+
 export function TrainingSection({ user }: { user: User }) {
 	const router = useRouter();
 	const [sort, setSort] = useState<"newest" | "oldest">("newest");
@@ -355,11 +456,9 @@ export function TrainingSection({ user }: { user: User }) {
 		router.push(`/dashboard/customers/training/devices/add?athlete=${encodeURIComponent(user.id)}`);
 	const handleEditDevice = (p: Product) =>
 		router.push(
-			`/dashboard/customers/training/devices/update/${encodeURIComponent(
-				p.id
-			)}?athlete=${encodeURIComponent(user.id)}&name=${encodeURIComponent(p.name)}&image=${encodeURIComponent(
-				p.image || ""
-			)}&updatedAt=${encodeURIComponent(p.updatedAt.toISOString())}`
+			`/dashboard/customers/training/devices/update/${encodeURIComponent(p.id)}?athlete=${encodeURIComponent(user.id)}&name=${encodeURIComponent(
+				p.name
+			)}&image=${encodeURIComponent(p.image || "")}&updatedAt=${encodeURIComponent(p.updatedAt.toISOString())}`
 		);
 	const handleDeleteDevice = (p: Product) => setConfirmProduct(p);
 
@@ -367,11 +466,9 @@ export function TrainingSection({ user }: { user: User }) {
 		router.push(`/dashboard/customers/training/shots/add?athlete=${encodeURIComponent(user.id)}`);
 	const handleEditShot = (o: Order) =>
 		router.push(
-			`/dashboard/customers/training/shots/update/${encodeURIComponent(
-				o.id
-			)}?athlete=${encodeURIComponent(user.id)}&score=${o.amount}&time=${encodeURIComponent(o.time || "")}&x=${
-				o.xOffset ?? ""
-			}&y=${o.yOffset ?? ""}&date=${encodeURIComponent(o.createdAt.toISOString())}&status=${o.status}`
+			`/dashboard/customers/training/shots/update/${encodeURIComponent(o.id)}?athlete=${encodeURIComponent(user.id)}&score=${o.amount}&time=${encodeURIComponent(
+				o.time || ""
+			)}&x=${o.xOffset ?? ""}&y=${o.yOffset ?? ""}&date=${encodeURIComponent(o.createdAt.toISOString())}&status=${o.status}`
 		);
 	const handleDeleteShot = (o: Order) => setConfirmOrder(o);
 
@@ -383,6 +480,14 @@ export function TrainingSection({ user }: { user: User }) {
 		if (confirmOrder) setShots((prev) => prev.filter((s) => s.id !== confirmOrder.id));
 		setConfirmOrder(null);
 	};
+
+	const [reviews, setReviews] = useState<ReviewItem[]>([
+		{ id: "r1", name: "Tư thế ngắm", rating: "good", note: "Ổn định, giữ vai thả lỏng tốt." },
+		{ id: "r2", name: "Kích hoạt cò", rating: "excellent", note: "Đều, không giật cò." },
+		{ id: "r3", name: "Theo dõi sau bắn", rating: "good", note: "Giữ ngắm 1–1.5s sau phát bắn." },
+		{ id: "r4", name: "Nhịp thở", rating: "improve", note: "Chưa đồng bộ; luyện nín thở 6s." },
+		{ id: "r5", name: "Tập trung tinh thần", rating: "good", note: "Tránh xem điểm sau từng phát." },
+	]);
 
 	return (
 		<Stack spacing={3}>
@@ -433,6 +538,8 @@ export function TrainingSection({ user }: { user: User }) {
 					<MenuItem value="asc">Thấp → Cao</MenuItem>
 				</TextField>
 			</Stack>
+
+			<CoachReviewCard items={reviews} onChange={setReviews} />
 
 			<Box
 				sx={{
@@ -497,8 +604,7 @@ export function TrainingSection({ user }: { user: User }) {
 				<DialogTitle>Xác nhận xóa thiết bị</DialogTitle>
 				<DialogContent>
 					<DialogContentText>
-						Bạn có chắc muốn xóa thiết bị
-						{confirmProduct ? ` “${confirmProduct.name}” (Mã: ${confirmProduct.id})` : ""}?
+						Bạn có chắc muốn xóa thiết bị{confirmProduct ? ` “${confirmProduct.name}” (Mã: ${confirmProduct.id})` : ""}?
 					</DialogContentText>
 				</DialogContent>
 				<DialogActions>

@@ -23,8 +23,6 @@ type Initial = {
 
 export default function ClientPage({ initial }: { initial: Initial }): React.JSX.Element {
 	const sp = useSearchParams();
-
-	// Lấy từ query runtime nếu có; fallback về initial do server pass xuống
 	const dLabel = sp.get("label") ?? initial.label;
 	const dValue = sp.get("value") ?? initial.value;
 	const athlete = sp.get("athlete") ?? initial.athlete;

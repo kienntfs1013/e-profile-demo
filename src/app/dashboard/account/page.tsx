@@ -12,11 +12,18 @@ import CardHeader from "@mui/material/CardHeader";
 import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
+import LinearProgress from "@mui/material/LinearProgress";
 import MenuItem from "@mui/material/MenuItem";
 import OutlinedInput from "@mui/material/OutlinedInput";
 import Select from "@mui/material/Select";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { ArrowDownRight } from "@phosphor-icons/react/dist/ssr/ArrowDownRight";
+import { ArrowUpRight } from "@phosphor-icons/react/dist/ssr/ArrowUpRight";
+import { Barbell } from "@phosphor-icons/react/dist/ssr/Barbell";
+import { HeartbeatIcon } from "@phosphor-icons/react/dist/ssr/Heartbeat";
+import { ListBullets } from "@phosphor-icons/react/dist/ssr/ListBullets";
+import { MedalIcon } from "@phosphor-icons/react/dist/ssr/Medal";
 
 const nations = [{ value: "VIE", label: "Việt Nam" }] as const;
 const sports = [
@@ -36,6 +43,66 @@ function splitVNName(full = "") {
 function toNation(u?: User) {
 	if (u?.address?.country === "VN") return "VIE";
 	return "";
+}
+
+function SummaryCard(props: {
+	title: string;
+	value: string;
+	icon: React.ReactNode;
+	chip?: React.ReactNode;
+	progress?: number;
+	upDown?: "up" | "down";
+	deltaText?: string;
+	avatarBg: string;
+	avatarFg?: string;
+}) {
+	const { title, value, icon, chip, progress, upDown, deltaText, avatarBg, avatarFg = "#fff" } = props;
+	return (
+		<Card sx={{ flex: 1, minWidth: 260, borderRadius: 3 }}>
+			<CardContent>
+				<Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+					<Typography variant="overline" color="text.secondary" letterSpacing={1}>
+						{title}
+					</Typography>
+					<Avatar
+						sx={{
+							width: 56,
+							height: 56,
+							bgcolor: "transparent",
+							background: avatarBg,
+							color: avatarFg,
+							boxShadow: "0 6px 16px rgba(0,0,0,.15)",
+						}}
+					>
+						{icon}
+					</Avatar>
+				</Stack>
+				<Typography variant="h4" fontWeight={800} sx={{ mb: progress != null ? 1 : 0.5 }}>
+					{value}
+				</Typography>
+				{progress != null ? (
+					<LinearProgress variant="determinate" value={progress} sx={{ height: 6, borderRadius: 3, mb: 1 }} />
+				) : null}
+				<Stack direction="row" spacing={1} alignItems="center">
+					{upDown === "up" ? (
+						<ArrowUpRight size={18} color="#22c55e" />
+					) : upDown === "down" ? (
+						<ArrowDownRight size={18} color="#ef4444" />
+					) : null}
+					{deltaText ? (
+						<Typography variant="body2" sx={{ color: upDown === "down" ? "#ef4444" : "#22c55e" }}>
+							{deltaText}
+						</Typography>
+					) : null}
+					{chip ? (
+						<Typography variant="body2" color="text.secondary">
+							{chip}
+						</Typography>
+					) : null}
+				</Stack>
+			</CardContent>
+		</Card>
+	);
 }
 
 export default function Page(): React.JSX.Element {
@@ -89,6 +156,43 @@ export default function Page(): React.JSX.Element {
 
 	return (
 		<Stack spacing={3} sx={{ width: "100%" }}>
+			<Stack direction={{ xs: "column", md: "row" }} spacing={2} useFlexGap flexWrap="wrap">
+				<SummaryCard
+					title="BUỔI TẬP (THÁNG NÀY)"
+					value="24"
+					icon={<Barbell size={26} weight="fill" />}
+					upDown="up"
+					deltaText="↑ 12% so với tháng trước"
+					chip={<span>Khối lượng ổn định</span>}
+					avatarBg="linear-gradient(135deg,#6366F1 0%,#8B5CF6 100%)"
+				/>
+				<SummaryCard
+					title="CHỈ SỐ SỨC KHỎE"
+					value="83/100"
+					icon={<HeartbeatIcon size={26} weight="fill" />}
+					upDown="down"
+					deltaText="↓ 4% so với tháng trước"
+					chip={<span>Cần theo dõi hồi phục</span>}
+					avatarBg="linear-gradient(135deg,#EC4899 0%,#F43F5E 100%)"
+				/>
+				<SummaryCard
+					title="TIẾN ĐỘ GIÁO ÁN"
+					value="75.5%"
+					icon={<ListBullets size={26} weight="fill" />}
+					progress={75.5}
+					chip={<span>Tuần hiện tại</span>}
+					avatarBg="linear-gradient(135deg,#60A5FA 0%,#3B82F6 100%)"
+				/>
+
+				<SummaryCard
+					title="THÀNH TÍCH"
+					value="15 huy chương"
+					icon={<MedalIcon size={26} weight="fill" />}
+					chip={<span>Mùa giải 2024–2025</span>}
+					avatarBg="linear-gradient(135deg,#F59E0B 0%,#F97316 100%)"
+				/>
+			</Stack>
+
 			<Card sx={{ width: "100%" }}>
 				<CardHeader title="Thông tin hồ sơ" />
 				<Divider />

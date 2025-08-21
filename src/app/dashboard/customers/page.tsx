@@ -149,7 +149,7 @@ export default function CustomersPage(): React.JSX.Element {
 							<TableRow>
 								<TableCell>Vận động viên</TableCell>
 								<TableCell align="center">Tuổi</TableCell>
-								<TableCell>Địa chỉ</TableCell>
+								<TableCell>Email</TableCell>
 								<TableCell>SĐT</TableCell>
 								<TableCell align="center">Trạng thái</TableCell>
 								<TableCell align="right">Thao tác</TableCell>
@@ -181,7 +181,7 @@ export default function CustomersPage(): React.JSX.Element {
 										<TableCell align="center">{row.age ?? "-"}</TableCell>
 
 										<TableCell>
-											<Typography variant="body2">{addr || "-"}</Typography>
+											<Typography variant="body2">{row.email || "-"}</Typography>
 										</TableCell>
 
 										<TableCell>

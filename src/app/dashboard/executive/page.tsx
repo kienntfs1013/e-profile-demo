@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
 	Box,
+	Button,
 	Card,
 	CardActionArea,
 	CardContent,
@@ -20,6 +22,8 @@ import {
 	TextField,
 	Typography,
 } from "@mui/material";
+import { GearSix as GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
+import { Plus as PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 
 type NewsItem = {
 	id: string;
@@ -203,15 +207,12 @@ const docsAll: DocItem[] = [
 	},
 ];
 
-const SPORT_OPTIONS = ["Tất cả", "Taekwondo", "Bắn súng", "Bắn cung", "Boxing"] as const;
-type SportFilter = (typeof SPORT_OPTIONS)[number];
-
 export default function ExecutivePage() {
+	const router = useRouter();
 	const [keyword, setKeyword] = React.useState("");
 	const [from, setFrom] = React.useState("");
 	const [to, setTo] = React.useState("");
 	const [sort, setSort] = React.useState<"desc" | "asc">("desc");
-	const [sport, setSport] = React.useState<SportFilter>("Tất cả");
 
 	const pageSize = 6;
 	const [pageDocs, setPageDocs] = React.useState(1);
@@ -239,15 +240,14 @@ export default function ExecutivePage() {
 			keyword
 				? (n.title + " " + (n.summary || "") + " " + (n.tag || "")).toLowerCase().includes(keyword.toLowerCase())
 				: true;
-		const bySport = (n: NewsItem) => (sport === "Tất cả" ? true : (n.tag || "").toLowerCase() === sport.toLowerCase());
-		const arr = allNews.filter((n) => byKW(n) && bySport(n) && inRange(n.date));
+		const arr = allNews.filter((n) => byKW(n) && inRange(n.date));
 		arr.sort((a, b) => {
 			const ta = new Date(a.date || 0).getTime();
 			const tb = new Date(b.date || 0).getTime();
 			return sort === "desc" ? tb - ta : ta - tb;
 		});
 		return arr;
-	}, [allNews, keyword, sport, from, to, sort]);
+	}, [allNews, keyword, from, to, sort]);
 
 	const featured = newsFiltered[0] ?? featuredSeed;
 	const subNews = newsFiltered.slice(1, 4).length ? newsFiltered.slice(1, 4) : subNewsSeed;
@@ -257,16 +257,14 @@ export default function ExecutivePage() {
 	const docsFiltered = React.useMemo(() => {
 		const byKW = (d: DocItem) =>
 			keyword ? (d.code + " " + d.excerpt + " " + (d.sport || "")).toLowerCase().includes(keyword.toLowerCase()) : true;
-		const bySport = (d: DocItem) =>
-			sport === "Tất cả" ? true : (d.sport || "Chung").toLowerCase() === sport.toLowerCase();
 		return docsAll
-			.filter((d) => byKW(d) && bySport(d) && inRange(d.date))
+			.filter((d) => byKW(d) && inRange(d.date))
 			.sort((a, b) =>
 				sort === "desc"
 					? new Date(b.date).getTime() - new Date(a.date).getTime()
 					: new Date(a.date).getTime() - new Date(b.date).getTime()
 			);
-	}, [keyword, sport, from, to, sort]);
+	}, [keyword, from, to, sort]);
 
 	const pagedDocs = React.useMemo(() => {
 		const start = (pageDocs - 1) * pageSize;
@@ -275,6 +273,74 @@ export default function ExecutivePage() {
 
 	return (
 		<Box sx={{ p: { xs: 2, md: 3 } }}>
+			<Stack
+				direction={{ xs: "column", lg: "row" }}
+				alignItems={{ xs: "stretch", lg: "center" }}
+				justifyContent="space-between"
+				spacing={2}
+				sx={{ mb: 3 }}
+			>
+				<Stack direction={{ xs: "column", md: "row" }} spacing={2} useFlexGap flexWrap="wrap" sx={{ flex: 1 }}>
+					<TextField
+						fullWidth
+						size="small"
+						label="Tìm kiếm"
+						value={keyword}
+						onChange={(e) => setKeyword(e.target.value)}
+						sx={{ flex: 1, minWidth: 220 }}
+					/>
+					<TextField
+						fullWidth
+						size="small"
+						type="date"
+						label="Từ ngày"
+						InputLabelProps={{ shrink: true }}
+						value={from}
+						onChange={(e) => setFrom(e.target.value)}
+						sx={{ flex: 1, minWidth: 160 }}
+					/>
+					<TextField
+						fullWidth
+						size="small"
+						type="date"
+						label="Đến ngày"
+						InputLabelProps={{ shrink: true }}
+						value={to}
+						onChange={(e) => setTo(e.target.value)}
+						sx={{ flex: 1, minWidth: 160 }}
+					/>
+					<TextField
+						fullWidth
+						size="small"
+						select
+						label="Sắp xếp"
+						value={sort}
+						onChange={(e) => setSort(e.target.value as "desc" | "asc")}
+						sx={{ flex: 1, minWidth: 140 }}
+					>
+						<MenuItem value="desc">Mới nhất</MenuItem>
+						<MenuItem value="asc">Cũ nhất</MenuItem>
+					</TextField>
+				</Stack>
+
+				<Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+					<Button
+						startIcon={<PlusIcon size={18} />}
+						variant="contained"
+						onClick={() => router.push("/dashboard/docs/new")}
+					>
+						Thêm mới
+					</Button>
+					<Button
+						startIcon={<GearSixIcon size={18} />}
+						variant="outlined"
+						onClick={() => router.push("/dashboard/docs/manage")}
+					>
+						Quản lý
+					</Button>
+				</Stack>
+			</Stack>
+
 			<Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
 				<Box sx={{ width: 6, height: 26, bgcolor: "primary.main", borderRadius: 1 }} />
 				<Typography variant="h6" fontWeight={900} letterSpacing={0.5}>
@@ -282,65 +348,6 @@ export default function ExecutivePage() {
 				</Typography>
 			</Stack>
 
-			<Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 3 }}>
-				<TextField
-					fullWidth
-					size="small"
-					label="Tìm kiếm"
-					value={keyword}
-					onChange={(e) => setKeyword(e.target.value)}
-					sx={{ flex: 1, minWidth: 220 }}
-				/>
-				<TextField
-					fullWidth
-					size="small"
-					type="date"
-					label="Từ ngày"
-					InputLabelProps={{ shrink: true }}
-					value={from}
-					onChange={(e) => setFrom(e.target.value)}
-					sx={{ flex: 1, minWidth: 160 }}
-				/>
-				<TextField
-					fullWidth
-					size="small"
-					type="date"
-					label="Đến ngày"
-					InputLabelProps={{ shrink: true }}
-					value={to}
-					onChange={(e) => setTo(e.target.value)}
-					sx={{ flex: 1, minWidth: 160 }}
-				/>
-				<TextField
-					fullWidth
-					size="small"
-					select
-					label="Môn"
-					value={sport}
-					onChange={(e) => setSport(e.target.value as SportFilter)}
-					sx={{ flex: 1, minWidth: 160 }}
-				>
-					{SPORT_OPTIONS.map((opt) => (
-						<MenuItem key={opt} value={opt}>
-							{opt}
-						</MenuItem>
-					))}
-				</TextField>
-				<TextField
-					fullWidth
-					size="small"
-					select
-					label="Sắp xếp"
-					value={sort}
-					onChange={(e) => setSort(e.target.value as "desc" | "asc")}
-					sx={{ flex: 1, minWidth: 140 }}
-				>
-					<MenuItem value="desc">Mới nhất</MenuItem>
-					<MenuItem value="asc">Cũ nhất</MenuItem>
-				</TextField>
-			</Stack>
-
-			{/* Featured */}
 			<Stack direction={{ xs: "column", md: "row" }} spacing={3} alignItems="stretch">
 				<Card sx={{ flex: 7, borderRadius: 2, overflow: "hidden" }}>
 					<CardActionArea component="a" href={featured.href}>
@@ -365,7 +372,6 @@ export default function ExecutivePage() {
 				</Stack>
 			</Stack>
 
-			{/* Sub news */}
 			<Stack direction={{ xs: "column", md: "row" }} spacing={3} sx={{ mt: 3 }}>
 				{subNews.map((n) => (
 					<Card key={n.id} sx={{ flex: 1, borderRadius: 2, overflow: "hidden" }}>
@@ -381,7 +387,6 @@ export default function ExecutivePage() {
 				))}
 			</Stack>
 
-			{/* Directive block */}
 			<Box sx={{ mt: 4 }}>
 				<Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
 					<Box sx={{ width: 6, height: 26, bgcolor: "primary.main", borderRadius: 1 }} />
@@ -438,15 +443,12 @@ export default function ExecutivePage() {
 				</Stack>
 			</Box>
 
-			{/* Docs table */}
 			<Box sx={{ mt: 5 }}>
-				<Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-					<Stack direction="row" alignItems="center" spacing={1}>
-						<Box sx={{ width: 6, height: 26, bgcolor: "primary.main", borderRadius: 1 }} />
-						<Typography variant="h6" fontWeight={900} letterSpacing={0.5}>
-							VĂN BẢN CHỈ ĐẠO, ĐIỀU HÀNH
-						</Typography>
-					</Stack>
+				<Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+					<Box sx={{ width: 6, height: 26, bgcolor: "primary.main", borderRadius: 1 }} />
+					<Typography variant="h6" fontWeight={900} letterSpacing={0.5}>
+						VĂN BẢN CHỈ ĐẠO, ĐIỀU HÀNH
+					</Typography>
 				</Stack>
 
 				<Box sx={{ border: 1, borderColor: "divider", borderRadius: 2, overflow: "hidden" }}>

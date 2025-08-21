@@ -1,15 +1,7 @@
-import * as React from "react";
-
 import ClientPage from "./client-page";
 
 export const dynamic = "force-dynamic";
-export const dynamicParams = false;
 
-export async function generateStaticParams() {
-	return [{ id: "demo" }];
-}
-
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-	const { id } = await params;
-	return <ClientPage id={id} />;
+export default function Page({ params }: { params: { id: string } }) {
+  return <ClientPage id={params.id} />;
 }
