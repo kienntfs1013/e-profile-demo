@@ -171,7 +171,6 @@ function MetricCard({ m }: { m: Metric }) {
 					<Typography variant="subtitle1" sx={{ fontWeight: 600, flex: "1 1 auto", minWidth: 0 }}>
 						{m.label}
 					</Typography>
-					<Chip size="small" label={evalRes.label} color={evalRes.chipColor} sx={{ mr: 1 }} />
 					<Box
 						sx={{
 							width: 32,
@@ -188,15 +187,19 @@ function MetricCard({ m }: { m: Metric }) {
 					</Box>
 				</Box>
 
-				<Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
-					<Typography variant="h5" sx={{ fontWeight: 700 }}>
-						{m.value}
-					</Typography>
-					{m.unit ? (
-						<Typography variant="body2" color="text.secondary">
-							{m.unit}
+				<Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1 }}>
+					<Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
+						<Typography variant="h5" sx={{ fontWeight: 700 }}>
+							{m.value}
 						</Typography>
-					) : null}
+
+						{m.unit ? (
+							<Typography variant="body2" color="text.secondary">
+								{m.unit}
+							</Typography>
+						) : null}
+					</Box>
+					<Chip size="small" label={evalRes.label} color={evalRes.chipColor} />
 				</Box>
 
 				{m.helper ? (

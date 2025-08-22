@@ -12,12 +12,13 @@ import {
 	Divider,
 	MenuItem,
 	Link as MLink,
-	Pagination,
+	Paper,
 	Stack,
 	Table,
 	TableBody,
 	TableCell,
 	TableHead,
+	TablePagination,
 	TableRow,
 	TextField,
 	Typography,
@@ -213,9 +214,8 @@ export default function ExecutivePage() {
 	const [from, setFrom] = React.useState("");
 	const [to, setTo] = React.useState("");
 	const [sort, setSort] = React.useState<"desc" | "asc">("desc");
-
-	const pageSize = 6;
-	const [pageDocs, setPageDocs] = React.useState(1);
+	const [page, setPage] = React.useState(0);
+	const [rowsPerPage, setRowsPerPage] = React.useState(6);
 
 	const inRange = (d?: string) => {
 		if (!d) return true;
@@ -266,10 +266,10 @@ export default function ExecutivePage() {
 			);
 	}, [keyword, from, to, sort]);
 
-	const pagedDocs = React.useMemo(() => {
-		const start = (pageDocs - 1) * pageSize;
-		return docsFiltered.slice(start, start + pageSize);
-	}, [docsFiltered, pageDocs]);
+	const rows = React.useMemo(
+		() => docsFiltered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
+		[docsFiltered, page, rowsPerPage]
+	);
 
 	return (
 		<Box sx={{ p: { xs: 2, md: 3 } }}>
@@ -451,51 +451,65 @@ export default function ExecutivePage() {
 					</Typography>
 				</Stack>
 
-				<Box sx={{ border: 1, borderColor: "divider", borderRadius: 2, overflow: "hidden" }}>
-					<Table size="medium" sx={{ minWidth: 960 }}>
-						<TableHead sx={{ bgcolor: "grey.50" }}>
-							<TableRow>
-								<TableCell sx={{ fontWeight: 700 }}>Số ký hiệu</TableCell>
-								<TableCell sx={{ fontWeight: 700 }}>Ngày ban hành</TableCell>
-								<TableCell sx={{ fontWeight: 700 }}>Trích yếu</TableCell>
-								<TableCell sx={{ fontWeight: 700, width: 160 }}>Tài liệu đính kèm</TableCell>
-							</TableRow>
-						</TableHead>
-						<TableBody>
-							{pagedDocs.map((d) => (
-								<TableRow key={d.id} hover>
-									<TableCell>
-										<MLink href="#" underline="hover">
-											{d.code}
-										</MLink>
-									</TableCell>
-									<TableCell>{new Date(d.date).toLocaleDateString("vi-VN")}</TableCell>
-									<TableCell>{d.excerpt}</TableCell>
-									<TableCell>
-										{d.fileUrl ? (
-											<MLink href={d.fileUrl} underline="hover">
-												Tải về
-											</MLink>
-										) : (
-											"-"
-										)}
-									</TableCell>
+				<Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden" }}>
+					<Box sx={{ overflowX: "auto", overflowY: "hidden" }}>
+						<Table size="medium" sx={{ minWidth: 960 }}>
+							<TableHead sx={{ bgcolor: "grey.50" }}>
+								<TableRow>
+									<TableCell sx={{ fontWeight: 700 }}>Số ký hiệu</TableCell>
+									<TableCell sx={{ fontWeight: 700 }}>Ngày ban hành</TableCell>
+									<TableCell sx={{ fontWeight: 700 }}>Trích yếu</TableCell>
+									<TableCell sx={{ fontWeight: 700, width: 160 }}>Tài liệu đính kèm</TableCell>
 								</TableRow>
-							))}
-						</TableBody>
-					</Table>
+							</TableHead>
+							<TableBody>
+								{rows.map((d) => (
+									<TableRow key={d.id} hover>
+										<TableCell>
+											<MLink href="#" underline="hover">
+												{d.code}
+											</MLink>
+										</TableCell>
+										<TableCell>{new Date(d.date).toLocaleDateString("vi-VN")}</TableCell>
+										<TableCell>{d.excerpt}</TableCell>
+										<TableCell>
+											{d.fileUrl ? (
+												<MLink href={d.fileUrl} underline="hover">
+													Tải về
+												</MLink>
+											) : (
+												"-"
+											)}
+										</TableCell>
+									</TableRow>
+								))}
+								{rows.length === 0 && (
+									<TableRow>
+										<TableCell colSpan={4}>
+											<Box p={3} textAlign="center" color="text.secondary">
+												Không có dữ liệu
+											</Box>
+										</TableCell>
+									</TableRow>
+								)}
+							</TableBody>
+						</Table>
+					</Box>
 
-					<Stack direction="row" justifyContent="flex-end" sx={{ p: 2 }}>
-						<Pagination
-							count={Math.ceil(docsFiltered.length / pageSize)}
-							page={pageDocs}
-							onChange={(_, v) => setPageDocs(v)}
-							color="primary"
-							shape="rounded"
-							size="small"
-						/>
-					</Stack>
-				</Box>
+					<TablePagination
+						component="div"
+						count={docsFiltered.length}
+						page={page}
+						rowsPerPage={rowsPerPage}
+						onPageChange={(_, newPage) => setPage(newPage)}
+						onRowsPerPageChange={(e) => {
+							setRowsPerPage(parseInt(e.target.value, 10));
+							setPage(0);
+						}}
+						rowsPerPageOptions={[6, 10, 25]}
+						labelRowsPerPage="Dòng / trang"
+					/>
+				</Paper>
 			</Box>
 		</Box>
 	);

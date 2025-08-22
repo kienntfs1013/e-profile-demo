@@ -250,13 +250,7 @@ function StatCard({ m }: { m: Metric }) {
 				<Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
 					{m.label}
 				</Typography>
-				<Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-					{m.badge ? <Chip size="small" label={m.badge} sx={{ height: 22 }} /> : null}
-					<Chip size="small" color={status.color} label={status.label} />
-				</Box>
-			</Box>
 
-			<Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
 				<Box
 					sx={{
 						width: 36,
@@ -271,6 +265,9 @@ function StatCard({ m }: { m: Metric }) {
 				>
 					<Icon weight="fill" />
 				</Box>
+			</Box>
+
+			<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
 				<Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
 					<Typography variant="h5" sx={{ fontWeight: 800 }}>
 						{m.value}
@@ -280,6 +277,9 @@ function StatCard({ m }: { m: Metric }) {
 							{m.unit}
 						</Typography>
 					) : null}
+				</Box>
+				<Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+					<Chip size="small" color={status.color} label={status.label} />
 				</Box>
 			</Box>
 
@@ -294,7 +294,7 @@ function StatCard({ m }: { m: Metric }) {
 
 function ChartCard({ title, children }: { title: string; children: React.ReactElement }) {
 	return (
-		<Card sx={{ height: 360, borderRadius: 2, minWidth: 0 }}>
+		<Card sx={{ height: 415, borderRadius: 2, minWidth: 0 }}>
 			<CardContent sx={{ height: "100%" }}>
 				<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
 					{title}

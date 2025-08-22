@@ -558,18 +558,11 @@ export function AchievementSection({ user }: { user?: User }): React.JSX.Element
 							<TextField
 								fullWidth
 								size="small"
-								label="Tìm kiếm (giải / nội dung / thành phố / năm / đối thủ)"
+								label="Tìm kiếm"
 								value={q}
 								onChange={(e) => setQ(e.target.value)}
 							/>
 							<Stack direction="row" spacing={2} sx={{ width: { xs: "100%", md: "auto" } }}>
-								<TextField
-									size="small"
-									label="Đối thủ"
-									value={opponent}
-									onChange={(e) => setOpponent(e.target.value)}
-									sx={{ minWidth: 200, width: { xs: "100%", md: 200 } }}
-								/>
 								<TextField
 									select
 									size="small"
