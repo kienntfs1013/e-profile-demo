@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { users as seedUsers, type User } from "@/models/user";
+import { buildImageUrl, deleteUser, listUsers, type UserDTO } from "@/services/user.service";
+import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -15,6 +16,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
+import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -35,39 +37,143 @@ function applyPagination<T>(rows: T[], page: number, rowsPerPage: number): T[] {
 	return rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 }
 
+function isAthlete(u: UserDTO): boolean {
+	const r = (u.role as any)?.toString?.().toLowerCase?.() ?? "";
+	return r === "athlete" || r === "vận động viên" || r === "van dong vien" || r === "1";
+}
+
+function fullName(u: UserDTO): string {
+	const ln = u.lastName?.trim() ?? "";
+	const fn = u.firstName?.trim() ?? "";
+	const byName = [ln, fn].filter(Boolean).join(" ").trim();
+	if (byName) return byName;
+	return u.email ? u.email.split("@")[0] : "Người dùng";
+}
+
+function calcAge(birthday?: string): number | undefined {
+	if (!birthday) return undefined;
+	const d = new Date(birthday);
+	if (isNaN(+d)) return undefined;
+	const now = new Date();
+	let age = now.getFullYear() - d.getFullYear();
+	const m = now.getMonth() - d.getMonth();
+	if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+	return age;
+}
+
+type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
+function normalizeSport(input?: string): SportCode {
+	const s = (input || "").toLowerCase().trim();
+	if (!s) return "";
+	if (s.includes("shoot") || s.includes("bắn súng") || s.includes("ban sung")) return "shooting";
+	if (s.includes("arch") || s.includes("bắn cung") || s.includes("ban cung")) return "archery";
+	if (s.includes("taek")) return "taekwondo";
+	if (s.includes("box")) return "boxing";
+	return "";
+}
+
+type Row = {
+	id: string;
+	name: string;
+	email?: string;
+	phone?: string;
+	avatar?: string;
+	status: "Đang hoạt động" | "Tạm ngưng";
+	age?: number;
+	sport?: SportCode;
+};
+
 export default function CustomersPage(): React.JSX.Element {
 	const router = useRouter();
 
-	const [data, setData] = React.useState<User[]>(seedUsers);
+	const [data, setData] = React.useState<Row[]>([]);
+	const [loading, setLoading] = React.useState(true);
+
 	const [search, setSearch] = React.useState("");
 	const [status, setStatus] = React.useState<"all" | "active" | "paused">("all");
-	const [sport, setSport] = React.useState<"shooting" | "archery" | "taekwondo" | "boxing">("shooting");
+	const [sport, setSport] = React.useState<"all" | SportCode>("all");
 	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(5);
 
-	const [confirmUser, setConfirmUser] = React.useState<User | null>(null);
+	const [confirmUser, setConfirmUser] = React.useState<Row | null>(null);
+	const [deleting, setDeleting] = React.useState(false);
+	const [toast, setToast] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
+
+	React.useEffect(() => {
+		let cancelled = false;
+
+		(async () => {
+			try {
+				setLoading(true);
+				const users = await listUsers(undefined, "id-asc");
+
+				const rows: Row[] = users.filter(isAthlete).map((u) => ({
+					id: String(u.id),
+					name: fullName(u),
+					email: u.email,
+					phone: u.phoneNumber,
+					avatar: buildImageUrl(u.profile_picture_path),
+					status: u.is_active === 1 ? "Đang hoạt động" : "Tạm ngưng",
+					age: calcAge(u.birthday),
+					sport: normalizeSport(u.sport),
+				}));
+
+				if (!cancelled) setData(rows);
+			} catch {
+				if (!cancelled) setData([]);
+			} finally {
+				if (!cancelled) setLoading(false);
+			}
+		})();
+
+		return () => {
+			cancelled = true;
+		};
+	}, []);
 
 	const filtered = React.useMemo(() => {
 		const q = search.trim().toLowerCase();
-		const base = data.filter((u) => u.role === "Vận động viên");
-		return base.filter((u) => {
+		return data.filter((u) => {
 			const okName = q ? u.name.toLowerCase().includes(q) : true;
 			const okStatus =
 				status === "all" ? true : status === "active" ? u.status === "Đang hoạt động" : u.status === "Tạm ngưng";
-			return okName && okStatus;
+			const okSport = sport === "all" ? true : u.sport === sport;
+			return okName && okStatus && okSport;
 		});
-	}, [data, search, status]);
+	}, [data, search, status, sport]);
 
 	const rows = React.useMemo(() => applyPagination(filtered, page, rowsPerPage), [filtered, page, rowsPerPage]);
 
 	const goDetail = (id: string) => router.push(`/dashboard/customers/${id}`);
 
-	const onRequestDelete = (u: User) => setConfirmUser(u);
-	const onCancelDelete = () => setConfirmUser(null);
-	const onConfirmDelete = () => {
-		if (confirmUser) {
-			setData((prev) => prev.filter((x) => x.id !== confirmUser.id));
+	const onRequestDelete = (u: Row) => setConfirmUser(u);
+	const onCancelDelete = () => {
+		if (deleting) return;
+		setConfirmUser(null);
+	};
+
+	const onConfirmDelete = async () => {
+		if (!confirmUser) return;
+		try {
+			setDeleting(true);
+			const idNum = Number(confirmUser.id);
+			if (Number.isNaN(idNum)) throw new Error("ID người dùng không hợp lệ");
+			const res = await deleteUser(idNum);
+			if (!res.ok) throw new Error(res.message || "Xóa người dùng thất bại");
+
 			setConfirmUser(null);
+			setToast({ type: "success", message: "Đã xóa người dùng thành công" });
+
+			window.setTimeout(() => {
+				window.location.reload();
+			}, 2000);
+		} catch (e: any) {
+			setToast({
+				type: "error",
+				message: e?.response?.data?.message || e?.message || "Không thể xóa người dùng",
+			});
+		} finally {
+			setDeleting(false);
 		}
 	};
 
@@ -101,10 +207,11 @@ export default function CustomersPage(): React.JSX.Element {
 							label="Bộ môn"
 							value={sport}
 							onChange={(e) => {
-								setSport(e.target.value as "shooting" | "archery" | "taekwondo" | "boxing");
+								setSport(e.target.value as "all" | SportCode);
 								setPage(0);
 							}}
 						>
+							<MenuItem value="all">Tất cả</MenuItem>
 							<MenuItem value="shooting">Bắn súng</MenuItem>
 							<MenuItem value="archery">Bắn cung</MenuItem>
 							<MenuItem value="taekwondo">Taekwondo</MenuItem>
@@ -157,10 +264,16 @@ export default function CustomersPage(): React.JSX.Element {
 						</TableHead>
 
 						<TableBody>
-							{rows.map((row: User) => {
-								const addr = [row.address?.street, row.address?.city, row.address?.state].filter(Boolean).join(", ");
-
-								return (
+							{loading ? (
+								<TableRow>
+									<TableCell colSpan={6}>
+										<Box p={3} textAlign="center" color="text.secondary">
+											Đang tải dữ liệu…
+										</Box>
+									</TableCell>
+								</TableRow>
+							) : (
+								rows.map((row) => (
 									<TableRow key={row.id} hover onClick={() => goDetail(row.id)} sx={{ cursor: "pointer" }}>
 										<TableCell>
 											<Stack direction="row" spacing={1.5} alignItems="center">
@@ -191,7 +304,7 @@ export default function CustomersPage(): React.JSX.Element {
 										<TableCell align="center">
 											<Chip
 												size="small"
-												label={row.status ?? "Đang hoạt động"}
+												label={row.status}
 												color={(row.status === "Đang hoạt động" ? "success" : "default") as any}
 												variant={row.status === "Đang hoạt động" ? "filled" : "outlined"}
 											/>
@@ -217,10 +330,10 @@ export default function CustomersPage(): React.JSX.Element {
 											</Stack>
 										</TableCell>
 									</TableRow>
-								);
-							})}
+								))
+							)}
 
-							{rows.length === 0 && (
+							{!loading && rows.length === 0 && (
 								<TableRow>
 									<TableCell colSpan={6}>
 										<Box p={3} textAlign="center" color="text.secondary">
@@ -257,14 +370,25 @@ export default function CustomersPage(): React.JSX.Element {
 					</DialogContentText>
 				</DialogContent>
 				<DialogActions>
-					<Button onClick={onCancelDelete} variant="outlined">
+					<Button onClick={onCancelDelete} variant="outlined" disabled={deleting}>
 						Hủy
 					</Button>
-					<Button onClick={onConfirmDelete} color="error" variant="contained">
-						Đồng ý
+					<Button onClick={onConfirmDelete} color="error" variant="contained" disabled={deleting}>
+						{deleting ? "Đang xóa..." : "Đồng ý"}
 					</Button>
 				</DialogActions>
 			</Dialog>
+
+			{toast ? (
+				<Snackbar
+					open
+					autoHideDuration={3000}
+					onClose={() => setToast(null)}
+					anchorOrigin={{ vertical: "top", horizontal: "right" }}
+				>
+					<Alert severity={toast.type}>{toast.message}</Alert>
+				</Snackbar>
+			) : null}
 		</Stack>
 	);
 }
