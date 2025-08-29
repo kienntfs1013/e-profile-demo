@@ -15,6 +15,7 @@ export const paths = {
 		achievement: "/dashboard/achievement",
 		account: "/dashboard/account",
 		customers: "/dashboard/customers",
+		competitions: "/dashboard/competitions",
 		integrations: "/dashboard/integrations",
 		settings: "/dashboard/settings",
 	},

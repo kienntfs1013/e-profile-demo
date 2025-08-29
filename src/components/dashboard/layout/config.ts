@@ -21,6 +21,12 @@ export const navItems = [
 		icon: "users",
 	},
 	{
+		key: "competitions",
+		title: "Giải đấu",
+		href: paths.dashboard.competitions,
+		icon: "trophy",
+	},
+	{
 		key: "health",
 		title: "Sức khỏe",
 		href: paths.dashboard.health,

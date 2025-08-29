@@ -1,4 +1,3 @@
-// src/app/dashboard/customers/achievements/[sport]/update/[id]/page.tsx
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";

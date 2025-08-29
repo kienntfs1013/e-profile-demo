@@ -8,6 +8,7 @@ import { Info } from "@phosphor-icons/react/dist/ssr/Info";
 import { MedalIcon } from "@phosphor-icons/react/dist/ssr/Medal";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/ssr/PlugsConnected";
 import { SignOut } from "@phosphor-icons/react/dist/ssr/SignOut";
+import { Trophy } from "@phosphor-icons/react/dist/ssr/Trophy";
 import { UserIcon } from "@phosphor-icons/react/dist/ssr/User";
 import { UsersIcon } from "@phosphor-icons/react/dist/ssr/Users";
 import { XSquare } from "@phosphor-icons/react/dist/ssr/XSquare";
@@ -25,4 +26,5 @@ export const navIcons = {
 	logout: SignOut,
 	info: Info,
 	briefcase: Briefcase,
+	trophy: Trophy,
 } as Record<string, Icon>;
