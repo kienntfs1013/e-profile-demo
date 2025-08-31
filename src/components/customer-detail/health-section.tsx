@@ -189,7 +189,7 @@ function evaluateMetric(m: Metric): { key: StatusKey; label: string; color: "suc
 			return { key: "danger", label: "Nguy hiểm", color: "error" };
 		}
 		case "glucose": {
-			const n = toNumber(m.value); // mg/dL (giả định lúc đói)
+			const n = toNumber(m.value);
 			if (n >= 70 && n <= 99) return { key: "good", label: "Tốt", color: "success" };
 			if ((n >= 100 && n <= 125) || (n >= 60 && n < 70))
 				return { key: "normal", label: "Bình thường", color: "warning" };
