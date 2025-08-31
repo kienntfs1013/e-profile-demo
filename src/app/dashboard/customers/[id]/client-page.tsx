@@ -6,6 +6,7 @@ import {
 	buildImageUrl,
 	fetchAthleteByUserId,
 	fetchUserByIdFromList,
+	getLoggedInUserId,
 	getUserById,
 	type UserDTO,
 } from "@/services/user.service";
@@ -84,6 +85,14 @@ function toRoleLabel(role: unknown): string {
 	if (r === "2" || /coach|huấn|huan/.test(r)) return "Huấn luyện viên";
 	return r || "-";
 }
+function isAthleteRole(role: unknown): boolean {
+	if (role == null) return false;
+	if (typeof role === "number") return role === 1;
+	const s = String(role).toLowerCase().trim();
+	if (s === "1") return true;
+	if (typeof role === "object" && "id" in (role as any)) return Number((role as any).id) === 1;
+	return /athlete|vận|van/.test(s);
+}
 function calcAge(birthday?: string): number | undefined {
 	if (!birthday) return undefined;
 	const d = new Date(birthday);
@@ -102,6 +111,7 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 	const [tab, setTab] = React.useState<TabKey>("general");
 	const [loading, setLoading] = React.useState(true);
 	const [user, setUser] = React.useState<DetailUser | undefined>(undefined);
+	const [viewerIsAthlete, setViewerIsAthlete] = React.useState(false);
 
 	React.useEffect(() => {
 		let cancelled = false;
@@ -109,6 +119,15 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 		(async () => {
 			try {
 				setLoading(true);
+
+				const viewerId = getLoggedInUserId?.();
+				if (viewerId) {
+					const viewer =
+						(await getUserById(viewerId).catch(() => null)) ??
+						(await fetchUserByIdFromList(viewerId).catch(() => null));
+					if (!cancelled && viewer) setViewerIsAthlete(isAthleteRole(viewer.role));
+				}
+
 				const numericId = Number(id);
 				if (!Number.isFinite(numericId)) {
 					if (!cancelled) setUser(undefined);
@@ -206,50 +225,52 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 				</Stack>
 			</Paper>
 
-			{isDesktop ? (
-				<Box sx={{ display: "flex", gap: 1, mb: 2, width: "100%" }}>
-					{TABS.map((t) => (
-						<Button
-							key={t.key}
-							onClick={() => setTab(t.key)}
-							variant={tab === t.key ? "contained" : "outlined"}
-							color="primary"
-							disableElevation
-							sx={{
-								flexBasis: "25%",
-								maxWidth: "25%",
-								borderRadius: 2,
-								textTransform: "none",
-								fontWeight: 600,
-								py: 1.25,
-							}}
-						>
-							{t.label}
-						</Button>
-					))}
-				</Box>
-			) : (
-				<TextField
-					select
-					fullWidth
-					size="small"
-					label="Chọn mục"
-					value={tab}
-					onChange={(e) => setTab(e.target.value as TabKey)}
-				>
-					{TABS.map((t) => (
-						<MenuItem key={t.key} value={t.key}>
-							{t.label}
-						</MenuItem>
-					))}
-				</TextField>
-			)}
+			{!viewerIsAthlete &&
+				(isDesktop ? (
+					<Box sx={{ display: "flex", gap: 1, mb: 2, width: "100%" }}>
+						{TABS.map((t) => (
+							<Button
+								key={t.key}
+								onClick={() => setTab(t.key)}
+								variant={tab === t.key ? "contained" : "outlined"}
+								color="primary"
+								disableElevation
+								sx={{
+									flexBasis: "25%",
+									maxWidth: "25%",
+									borderRadius: 2,
+									textTransform: "none",
+									fontWeight: 600,
+									py: 1.25,
+								}}
+							>
+								{t.label}
+							</Button>
+						))}
+					</Box>
+				) : (
+					<TextField
+						select
+						fullWidth
+						size="small"
+						label="Chọn mục"
+						value={tab}
+						onChange={(e) => setTab(e.target.value as TabKey)}
+					>
+						{TABS.map((t) => (
+							<MenuItem key={t.key} value={t.key}>
+								{t.label}
+							</MenuItem>
+						))}
+					</TextField>
+				))}
 
 			<SectionCard>
-				{tab === "general" && <GeneralSection user={user as any} />}
-				{tab === "health" && <HealthSection user={user as any} />}
-				{tab === "training" && <TrainingSection user={user as any} />}
-				{tab === "achievement" && <AchievementSection user={user as any} />}
+				{tab === "general" && <GeneralSection id={user.id} />}
+
+				{!viewerIsAthlete && tab === "health" && <HealthSection user={user as any} />}
+				{!viewerIsAthlete && tab === "training" && <TrainingSection user={user as any} />}
+				{!viewerIsAthlete && tab === "achievement" && <AchievementSection user={user as any} />}
 			</SectionCard>
 		</Stack>
 	);

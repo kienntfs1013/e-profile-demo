@@ -194,7 +194,13 @@ export default function AchievementForm({
 					await updateTaekwondoCompetitionById(id, payload as Partial<TaekwondoCompetitionDTO>);
 			}
 			setToast({ type: "success", message: "Đã lưu thành công" });
-			setTimeout(() => router.push(`/dashboard/customers/${athleteId}`), 600);
+			window.setTimeout(() => {
+				if (typeof window !== "undefined" && window.history.length > 1) {
+					router.back();
+				} else {
+					router.push("/");
+				}
+			}, 1200);
 		} catch (e: any) {
 			setToast({ type: "error", message: e?.response?.data?.message || e?.message || "Lỗi kết nối Cơ Sở Dữ Liệu" });
 		} finally {

@@ -45,7 +45,6 @@ export default function CompetitionForm({ mode, id, title }: { mode: Mode; id?: 
 		end_date: dayjs().format("YYYY-MM-DD"),
 	});
 
-	// Load để cập nhật: list rồi lọc theo id (không dùng getCompetitionById)
 	React.useEffect(() => {
 		if (mode !== "update" || !id) return;
 		let cancelled = false;
@@ -93,12 +92,17 @@ export default function CompetitionForm({ mode, id, title }: { mode: Mode; id?: 
 			if (mode === "add") {
 				await addCompetition(payload);
 			} else if (mode === "update" && id) {
-				// ✅ Cập nhật dùng PUT /:id, KHÔNG gửi id trong body
 				await updateCompetitionById(id, payload);
 			}
 
 			setToast({ type: "success", message: "Đã lưu thành công" });
-			setTimeout(() => router.push("/dashboard/competitions"), 600);
+			window.setTimeout(() => {
+				if (typeof window !== "undefined" && window.history.length > 1) {
+					router.back();
+				} else {
+					router.push("/");
+				}
+			}, 1200);
 		} catch (e: any) {
 			const msg = e?.response?.data?.message || e?.response?.data || e?.message || "Lỗi kết nối Cơ Sở Dữ Liệu";
 			setToast({ type: "error", message: msg });

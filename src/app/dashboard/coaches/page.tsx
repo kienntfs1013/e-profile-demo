@@ -25,9 +25,9 @@ function applyPagination<T>(rows: T[], page: number, rowsPerPage: number): T[] {
 	return rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 }
 
-function isAthlete(u: UserDTO): boolean {
+function isCoach(u: UserDTO): boolean {
 	const r = (u.role as any)?.toString?.().toLowerCase?.() ?? "";
-	return r === "athlete" || r === "vận động viên" || r === "van dong vien" || r === "1";
+	return r === "coach" || r === "huấn luyện viên" || r === "huan luyen vien" || r === "2";
 }
 
 function fullName(u: UserDTO): string {
@@ -108,7 +108,7 @@ export default function CustomersPage(): React.JSX.Element {
 				setLoading(true);
 				const users = await listUsers(undefined, "id-asc");
 
-				const rows: Row[] = users.filter(isAthlete).map((u) => ({
+				const rows: Row[] = users.filter(isCoach).map((u) => ({
 					id: String(u.id),
 					name: fullName(u),
 					email: u.email,
@@ -156,7 +156,7 @@ export default function CustomersPage(): React.JSX.Element {
 
 	const goDetail = (id: string) => router.push(`/dashboard/customers/${id}`);
 
-	const visibleColCount = 6;
+	const visibleColCount = 5;
 
 	return (
 		<Stack spacing={3}>
@@ -224,7 +224,7 @@ export default function CustomersPage(): React.JSX.Element {
 					<Table sx={{ minWidth: 900 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Vận động viên</TableCell>
+								<TableCell>Huấn luyện viên</TableCell>
 								<TableCell align="center">Bộ môn</TableCell>
 								<TableCell>Quốc gia</TableCell>
 								<TableCell align="center">Giới tính</TableCell>

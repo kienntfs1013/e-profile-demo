@@ -15,9 +15,33 @@ export const navItems = [
 		icon: "briefcase",
 	},
 	{
-		key: "athletes",
-		title: "Vận động viên",
+		key: "customers",
+		title: "Danh sách vận động viên",
 		href: paths.dashboard.customers,
+		icon: "users",
+	},
+	{
+		key: "coaches",
+		title: "Danh sách huấn luyện viên",
+		href: paths.dashboard.coaches,
+		icon: "users",
+	},
+	{
+		key: "athletesManagement",
+		title: "Quản lý vận động viên",
+		href: paths.dashboard.athletesManagement,
+		icon: "users",
+	},
+	{
+		key: "coachesManagement",
+		title: "Quản lý huấn luyện viên",
+		href: paths.dashboard.coachesManagement,
+		icon: "users",
+	},
+	{
+		key: "usersManagement",
+		title: "Quản lý người dùng",
+		href: paths.dashboard.usersManagement,
 		icon: "users",
 	},
 	{

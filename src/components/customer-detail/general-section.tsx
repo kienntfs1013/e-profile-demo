@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { User } from "@/models/user";
-import { fetchUserByIdFromList, getLoggedInUserId, type UserDTO } from "@/services/user.service";
+import { fetchUserByIdFromList, getLoggedInUserId, getUserById, type UserDTO } from "@/services/user.service";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import dayjs from "dayjs";
@@ -22,100 +21,108 @@ const roleLabel = (v?: any) => {
 	return s || "-";
 };
 
-const fmtDate = (v?: string) => (v ? dayjs(v).format("DD/MM/YYYY") : "-");
-const fmtDateTime = (v?: string) => (v ? dayjs(v).format("DD/MM/YYYY HH:mm") : "-");
-
-type Extra = {
-	id?: number | string;
-	firstName?: string;
-	lastName?: string;
-	phoneNumber?: string;
-	sport?: string;
-	gender?: string;
-	birthday?: string;
-	created_at?: string;
-	updated_at?: string;
-	createdAt?: string;
-	updatedAt?: string;
-	address?: string;
-	district?: string;
-	city?: string;
-	country?: string;
-	national_id_card_no?: string;
-	passport_no?: string;
-	is_active?: number;
-	status?: string;
-	role?: any;
-	profile_picture_path?: string;
+const isAthleteRole = (role: any): boolean => {
+	if (role == null) return false;
+	if (typeof role === "number") return role === 1;
+	if (typeof role === "string") {
+		const s = role.trim().toLowerCase();
+		return s === "1" || s.includes("athlete") || s.includes("vận") || s.includes("van");
+	}
+	if (typeof role === "object" && "id" in role) return Number((role as any).id) === 1;
+	return false;
 };
 
-export function GeneralSection({ user }: { user: User & Partial<Extra> }) {
-	const initialId =
-		(user as any)?.id != null && !Number.isNaN(Number((user as any).id))
-			? Number((user as any).id)
-			: getLoggedInUserId();
+const fmtDate = (v?: string) => (v ? dayjs(v).format("DD/MM/YYYY") : "-");
 
-	const [apiUser, setApiUser] = React.useState<UserDTO | null>(null);
+type Extra = {
+	district?: string;
+	city?: string;
+	is_active?: number;
+	status?: string;
+	national_id_card_no?: string;
+	passport_no?: string;
+	address?: string;
+	country?: string;
+	phoneNumber?: string;
+	birthday?: string;
+	gender?: string;
+	role?: any;
+};
+
+export function GeneralSection({ id }: { id?: number | string }) {
+	const [viewerIsAthlete, setViewerIsAthlete] = React.useState(false);
+	const [u, setU] = React.useState<(UserDTO & Extra) | null>(null);
 
 	React.useEffect(() => {
 		let off = false;
-		const load = async () => {
-			if (!initialId) return;
-			try {
-				const u = await fetchUserByIdFromList(initialId);
-				if (!off) setApiUser(u);
-			} catch {
-				if (!off) setApiUser(null);
+		(async () => {
+			const viewerId = getLoggedInUserId?.();
+
+			if (viewerId) {
+				try {
+					const me =
+						(await getUserById(viewerId).catch(() => null)) ??
+						(await fetchUserByIdFromList(viewerId).catch(() => null));
+					if (!off && me) setViewerIsAthlete(isAthleteRole(me.role));
+				} catch {}
 			}
-		};
-		load();
+
+			const targetId = id != null && !Number.isNaN(Number(id)) ? Number(id) : viewerId || undefined;
+			if (!targetId) return;
+
+			try {
+				const user =
+					(await getUserById(targetId).catch(() => null)) ?? (await fetchUserByIdFromList(targetId).catch(() => null));
+				if (!off) setU((user as any) ?? null);
+			} catch {
+				if (!off) setU(null);
+			}
+		})();
 		return () => {
 			off = true;
 		};
-	}, [initialId]);
+	}, [id]);
 
-	const u = { ...(user as any), ...(apiUser ?? {}) } as Partial<UserDTO> & Partial<Extra> & Record<string, any>;
+	const statusText =
+		(u as any)?.status ?? (u?.is_active != null ? (u.is_active === 1 ? "Đang hoạt động" : "Tạm ngưng") : "-");
 
-	const created = (u.created_at as string) || (u.createdAt as string);
-
-	const fields: { label: string; value: React.ReactNode }[] = [
-		{ label: "Họ", value: u.lastName ?? "-" },
-		{ label: "Tên", value: u.firstName ?? "-" },
-		{ label: "Email", value: u.email ?? "-" },
-		{ label: "Số điện thoại", value: u.phoneNumber ?? (u as any).phone ?? "-" },
-		{ label: "Vai trò", value: roleLabel(u.role) },
-		{ label: "Trạng thái", value: u.status },
-		{ label: "Giới tính", value: genderLabel(u.gender) },
-		{ label: "Ngày sinh", value: fmtDate(u.birthday) },
-		{ label: "CMND/CCCD", value: u.national_id_card_no ?? "-" },
-		{ label: "Hộ chiếu", value: u.passport_no ?? "-" },
-		{
-			label: "Địa chỉ",
-			value: [u.address, u.city, u.district].filter(Boolean).join(", ") || "-",
-		},
-		{ label: "Quận/Huyện", value: u.district ?? "-" },
-		{ label: "Tỉnh/Thành", value: u.city ?? "-" },
-		{ label: "Quốc gia", value: u.country ?? "-" },
-		{ label: "Ngày tham gia", value: fmtDateTime(created) },
+	const allFields: { key: string; label: string; value: React.ReactNode }[] = [
+		{ key: "lastName", label: "Họ", value: u?.lastName ?? "-" },
+		{ key: "firstName", label: "Tên", value: u?.firstName ?? "-" },
+		{ key: "email", label: "Email", value: u?.email ?? "-" },
+		{ key: "phoneNumber", label: "Số điện thoại", value: u?.phoneNumber ?? (u as any)?.phone ?? "-" },
+		{ key: "role", label: "Vai trò", value: roleLabel(u?.role) },
+		{ key: "status", label: "Trạng thái", value: statusText },
+		{ key: "gender", label: "Giới tính", value: genderLabel(u?.gender) },
+		{ key: "birthday", label: "Ngày sinh", value: fmtDate(u?.birthday) },
+		{ key: "national_id_card_no", label: "CMND/CCCD", value: u?.national_id_card_no ?? "-" },
+		{ key: "passport_no", label: "Hộ chiếu", value: u?.passport_no ?? "-" },
+		{ key: "address", label: "Địa chỉ", value: [u?.address, u?.city, u?.district].filter(Boolean).join(", ") || "-" },
+		{ key: "district", label: "Quận/Huyện", value: u?.district ?? "-" },
+		{ key: "city", label: "Tỉnh/Thành", value: u?.city ?? "-" },
+		{ key: "country", label: "Quốc gia", value: u?.country ?? "-" },
 	];
 
+	const hiddenForAthlete = new Set([
+		"email",
+		"phoneNumber",
+		"status",
+		"national_id_card_no",
+		"passport_no",
+		"address",
+		"district",
+		"city",
+	]);
+
+	const fields = viewerIsAthlete ? allFields.filter((f) => !hiddenForAthlete.has(f.key)) : allFields;
+
 	return (
-		<Box
-			sx={{
-				display: "flex",
-				flexWrap: "wrap",
-				gap: 2,
-				"& > .item": { minWidth: 0 },
-			}}
-		>
-			{fields.map((f, i) => (
+		<Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, "& > .item": { minWidth: 0 } }}>
+			{fields.map((f) => (
 				<Box
-					key={i}
+					key={f.key}
 					className="item"
-					sx={{
-						flex: { xs: "1 1 100%", md: "1 1 260px" },
-						maxWidth: { xs: "100%", md: "100%" },
-					}}
+					sx={{ flex: { xs: "1 1 100%", md: "1 1 260px" }, maxWidth: { xs: "100%", md: "100%" } }}
 				>
 					<Box
 						sx={{

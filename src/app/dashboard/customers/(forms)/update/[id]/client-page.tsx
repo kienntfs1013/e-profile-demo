@@ -304,10 +304,14 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 				is_active: current.is_active ?? 1,
 			});
 
-			setToast({ type: "success", message: "Đã lưu thay đổi. Đang chuyển về danh sách…" });
+			setToast({ type: "success", message: "Đã lưu thay đổi. Đang quay lại…" });
 			window.setTimeout(() => {
-				router.push("/dashboard/customers");
-			}, 2000);
+				if (typeof window !== "undefined" && window.history.length > 1) {
+					router.back();
+				} else {
+					router.push("/");
+				}
+			}, 1200);
 		} catch (e: any) {
 			const msg = e?.response?.data?.message || e?.message || "Lỗi kết nối Cơ Sở Dữ Liệu";
 			setToast({ type: "error", message: msg });

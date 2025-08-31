@@ -290,7 +290,7 @@ export default function Page(): React.JSX.Element {
 				birthday: form.birthday || undefined,
 				sport: mapSportToVN(form.sport) ?? current.sport,
 				country: mapNationToCountry(form.nation) ?? current.country ?? "Việt Nam",
-				role: form.role !== "" ? Number(form.role) : parseRoleToInt(current.role), // GỬI SỐ 1/2
+				role: form.role !== "" ? Number(form.role) : parseRoleToInt(current.role),
 				profile_picture_path: current.profile_picture_path,
 				address: form.address || current.address,
 				district: form.district || current.district,
@@ -303,6 +303,14 @@ export default function Page(): React.JSX.Element {
 
 			setFetchError(null);
 			setToast({ type: "success", message: "Đã lưu thay đổi" });
+
+			window.setTimeout(() => {
+				if (typeof window !== "undefined" && window.history.length > 1) {
+					router.back();
+				} else {
+					router.push("/");
+				}
+			}, 1200);
 		} catch (e: any) {
 			const msg = e?.response?.data?.message || e?.message || "Lỗi kết nối Cơ Sở Dữ Liệu";
 			setToast({ type: "error", message: msg });
@@ -313,38 +321,6 @@ export default function Page(): React.JSX.Element {
 
 	return (
 		<Stack spacing={3} sx={{ width: "100%" }}>
-			<Stack direction={{ xs: "column", md: "row" }} spacing={2} useFlexGap flexWrap="wrap">
-				<SummaryCard
-					title="BUỔI TẬP (THÁNG NÀY)"
-					value="24"
-					icon={<Barbell size={26} weight="fill" />}
-					upDown="up"
-					deltaText="↑ 12% so với tháng trước"
-					avatarBg="linear-gradient(135deg,#6366F1 0%,#8B5CF6 100%)"
-				/>
-				<SummaryCard
-					title="CHỈ SỐ SỨC KHỎE"
-					value="83/100"
-					icon={<HeartbeatIcon size={26} weight="fill" />}
-					upDown="down"
-					deltaText="↓ 4% so với tháng trước"
-					avatarBg="linear-gradient(135deg,#EC4899 0%,#F43F5E 100%)"
-				/>
-				<SummaryCard
-					title="TIẾN ĐỘ GIÁO ÁN"
-					value="75.5%"
-					icon={<ListBullets size={26} weight="fill" />}
-					progress={75.5}
-					avatarBg="linear-gradient(135deg,#60A5FA 0%,#3B82F6 100%)"
-				/>
-				<SummaryCard
-					title="THÀNH TÍCH"
-					value="15 huy chương"
-					icon={<MedalIcon size={26} weight="fill" />}
-					avatarBg="linear-gradient(135deg,#F59E0B 0%,#F97316 100%)"
-				/>
-			</Stack>
-
 			<Card sx={{ width: "100%" }}>
 				<CardHeader title="Thông tin hồ sơ" />
 				<Divider />

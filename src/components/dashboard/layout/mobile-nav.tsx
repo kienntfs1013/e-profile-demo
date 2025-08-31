@@ -3,6 +3,7 @@
 import * as React from "react";
 import RouterLink from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { fetchUserByIdFromList, getLoggedInUserId, getUserById } from "@/services/user.service";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
@@ -17,6 +18,36 @@ import { useUser } from "@/hooks/use-user";
 import { navItems } from "./config";
 import { navIcons } from "./nav-icons";
 
+type RoleView = "athlete" | "coach" | "other";
+
+const roleTypeFrom = (role: unknown): RoleView => {
+	if (role == null) return "other";
+	if (typeof role === "number") return role === 1 ? "athlete" : role === 2 ? "coach" : "other";
+	const s = String(role).toLowerCase();
+	if (s === "1" || /athlete|vận|van/.test(s)) return "athlete";
+	if (s === "2" || /coach|huấn|huan/.test(s)) return "coach";
+	if (typeof role === "object" && "id" in (role as any)) {
+		const id = Number((role as any).id);
+		return id === 1 ? "athlete" : id === 2 ? "coach" : "other";
+	}
+	return "other";
+};
+
+const filterItemsByRole = (items: NavItemConfig[], role: RoleView | null) => {
+	if (!role) return items;
+	const hideForAthlete = new Set(["athletesManagement", "coachesManagement", "usersManagement", "competitions"]);
+	const hideForCoach = new Set([
+		"coachesManagement",
+		"usersManagement",
+		"health",
+		"training",
+		"achievement",
+		"competitions",
+	]);
+	const hide = role === "athlete" ? hideForAthlete : role === "coach" ? hideForCoach : new Set<string>();
+	return items.filter((it) => !hide.has(it.key));
+};
+
 export interface MobileNavProps {
 	onClose?: () => void;
 	open?: boolean;
@@ -24,6 +55,24 @@ export interface MobileNavProps {
 
 export function MobileNav({ open, onClose }: MobileNavProps): React.JSX.Element {
 	const pathname = usePathname();
+	const [viewerRole, setViewerRole] = React.useState<RoleView | null>(null);
+
+	React.useEffect(() => {
+		let off = false;
+		(async () => {
+			try {
+				const id = getLoggedInUserId?.();
+				if (!id) return;
+				const me = (await getUserById(id).catch(() => null)) ?? (await fetchUserByIdFromList(id).catch(() => null));
+				if (!off && me) setViewerRole(roleTypeFrom(me.role));
+			} catch {}
+		})();
+		return () => {
+			off = true;
+		};
+	}, []);
+
+	const itemsToRender = React.useMemo(() => filterItemsByRole(navItems, viewerRole), [viewerRole]);
 
 	return (
 		<Drawer
@@ -54,13 +103,7 @@ export function MobileNav({ open, onClose }: MobileNavProps): React.JSX.Element 
 			<Stack spacing={2} sx={{ p: 3 }}>
 				<Typography
 					variant="h6"
-					sx={{
-						m: 0,
-						lineHeight: 1,
-						fontWeight: 700,
-						letterSpacing: 0.2,
-						color: "var(--mui-palette-common-white)",
-					}}
+					sx={{ m: 0, lineHeight: 1, fontWeight: 700, letterSpacing: 0.2, color: "var(--mui-palette-common-white)" }}
 				>
 					E-Profile
 				</Typography>
@@ -69,7 +112,7 @@ export function MobileNav({ open, onClose }: MobileNavProps): React.JSX.Element 
 			<Divider sx={{ borderColor: "var(--mui-palette-neutral-700)" }} />
 
 			<Box component="nav" sx={{ flex: "1 1 auto", p: "12px" }}>
-				{renderNavItems({ pathname, items: navItems, onClose })}
+				{renderNavItems({ pathname, items: itemsToRender, onClose })}
 			</Box>
 
 			<Divider sx={{ borderColor: "var(--mui-palette-neutral-700)" }} />

@@ -2,12 +2,21 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { buildImageUrl, listUsers, type UserDTO } from "@/services/user.service";
+import { buildImageUrl, deleteUser, listUsers, type UserDTO } from "@/services/user.service";
+import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
+import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -20,6 +29,9 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { Eye } from "@phosphor-icons/react/dist/ssr/Eye";
+import { PencilSimple } from "@phosphor-icons/react/dist/ssr/PencilSimple";
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
+import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 
 function applyPagination<T>(rows: T[], page: number, rowsPerPage: number): T[] {
 	return rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
@@ -59,13 +71,6 @@ function normalizeSport(input?: string): SportCode {
 	if (s.includes("box")) return "boxing";
 	return "";
 }
-function labelSport(s: SportCode): string {
-	if (s === "shooting") return "Bắn súng";
-	if (s === "archery") return "Bắn cung";
-	if (s === "taekwondo") return "Taekwondo";
-	if (s === "boxing") return "Boxing";
-	return "-";
-}
 
 function normalizeGender(input?: string | number | null): "Nam" | "Nữ" | "Khác" | "-" {
 	if (input === undefined || input === null) return "-";
@@ -81,24 +86,27 @@ type Row = {
 	email?: string;
 	phone?: string;
 	avatar?: string;
+	status: "Đang hoạt động" | "Tạm ngưng";
 	age?: number;
 	sport?: SportCode;
-	country?: string;
 	gender?: "Nam" | "Nữ" | "Khác" | "-";
 };
 
-export default function CustomersPage(): React.JSX.Element {
+export default function AthletesManagementPage(): React.JSX.Element {
 	const router = useRouter();
 
 	const [data, setData] = React.useState<Row[]>([]);
 	const [loading, setLoading] = React.useState(true);
 
 	const [search, setSearch] = React.useState("");
+	const [status, setStatus] = React.useState<"all" | "active" | "paused">("all");
 	const [sport, setSport] = React.useState<"all" | SportCode>("all");
-	const [sortName, setSortName] = React.useState<"asc" | "desc">("asc");
-
 	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(5);
+
+	const [confirmUser, setConfirmUser] = React.useState<Row | null>(null);
+	const [deleting, setDeleting] = React.useState(false);
+	const [toast, setToast] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
 
 	React.useEffect(() => {
 		let cancelled = false;
@@ -114,9 +122,9 @@ export default function CustomersPage(): React.JSX.Element {
 					email: u.email,
 					phone: u.phoneNumber,
 					avatar: buildImageUrl(u.profile_picture_path),
+					status: u.is_active === 1 ? "Đang hoạt động" : "Tạm ngưng",
 					age: calcAge(u.birthday),
 					sport: normalizeSport(u.sport),
-					country: u.country || undefined,
 					gender: normalizeGender((u as any).gender),
 				}));
 
@@ -137,26 +145,47 @@ export default function CustomersPage(): React.JSX.Element {
 		const q = search.trim().toLowerCase();
 		return data.filter((u) => {
 			const okName = q ? u.name.toLowerCase().includes(q) : true;
+			const okStatus =
+				status === "all" ? true : status === "active" ? u.status === "Đang hoạt động" : u.status === "Tạm ngưng";
 			const okSport = sport === "all" ? true : u.sport === sport;
-			return okName && okSport;
+			return okName && okStatus && okSport;
 		});
-	}, [data, search, sport]);
+	}, [data, search, status, sport]);
 
-	const sorted = React.useMemo(() => {
-		const arr = [...filtered];
-		arr.sort((a, b) =>
-			sortName === "asc"
-				? a.name.localeCompare(b.name, "vi", { sensitivity: "base" })
-				: b.name.localeCompare(a.name, "vi", { sensitivity: "base" })
-		);
-		return arr;
-	}, [filtered, sortName]);
-
-	const rows = React.useMemo(() => applyPagination(sorted, page, rowsPerPage), [sorted, page, rowsPerPage]);
+	const rows = React.useMemo(() => applyPagination(filtered, page, rowsPerPage), [filtered, page, rowsPerPage]);
 
 	const goDetail = (id: string) => router.push(`/dashboard/customers/${id}`);
 
-	const visibleColCount = 6;
+	const onRequestDelete = (u: Row) => setConfirmUser(u);
+	const onCancelDelete = () => {
+		if (deleting) return;
+		setConfirmUser(null);
+	};
+
+	const onConfirmDelete = async () => {
+		if (!confirmUser) return;
+		try {
+			setDeleting(true);
+			const idNum = Number(confirmUser.id);
+			if (Number.isNaN(idNum)) throw new Error("ID người dùng không hợp lệ");
+			const res = await deleteUser(idNum);
+			if (!res.ok) throw new Error(res.message || "Xóa người dùng thất bại");
+
+			setConfirmUser(null);
+			setToast({ type: "success", message: "Đã xóa người dùng thành công" });
+
+			window.setTimeout(() => {
+				window.location.reload();
+			}, 2000);
+		} catch (e: any) {
+			setToast({
+				type: "error",
+				message: e?.response?.data?.message || e?.message || "Không thể xóa người dùng",
+			});
+		} finally {
+			setDeleting(false);
+		}
+	};
 
 	return (
 		<Stack spacing={3}>
@@ -205,18 +234,29 @@ export default function CustomersPage(): React.JSX.Element {
 							select
 							fullWidth
 							size="small"
-							label="Sắp xếp theo tên"
-							value={sortName}
+							label="Trạng thái"
+							value={status}
 							onChange={(e) => {
-								setSortName(e.target.value as "asc" | "desc");
+								setStatus(e.target.value as "all" | "active" | "paused");
 								setPage(0);
 							}}
 						>
-							<MenuItem value="asc">A → Z</MenuItem>
-							<MenuItem value="desc">Z → A</MenuItem>
+							<MenuItem value="all">Tất cả</MenuItem>
+							<MenuItem value="active">Đang hoạt động</MenuItem>
+							<MenuItem value="paused">Tạm ngưng</MenuItem>
 						</TextField>
 					</Box>
 				</Stack>
+
+				<Box sx={{ display: "flex", justifyContent: { xs: "flex-start", md: "flex-end" } }}>
+					<Button
+						startIcon={<PlusIcon fontSize="var(--icon-fontSize-md)" />}
+						variant="contained"
+						onClick={() => router.push("/dashboard/customers/add")}
+					>
+						Thêm mới
+					</Button>
+				</Box>
 			</Stack>
 
 			<Paper variant="outlined" sx={{ overflow: "hidden", borderRadius: 2 }}>
@@ -225,10 +265,11 @@ export default function CustomersPage(): React.JSX.Element {
 						<TableHead>
 							<TableRow>
 								<TableCell>Vận động viên</TableCell>
-								<TableCell align="center">Bộ môn</TableCell>
-								<TableCell>Quốc gia</TableCell>
 								<TableCell align="center">Giới tính</TableCell>
 								<TableCell align="center">Tuổi</TableCell>
+								<TableCell>Email</TableCell>
+								<TableCell>SĐT</TableCell>
+								<TableCell align="center">Trạng thái</TableCell>
 								<TableCell align="right">Thao tác</TableCell>
 							</TableRow>
 						</TableHead>
@@ -236,7 +277,7 @@ export default function CustomersPage(): React.JSX.Element {
 						<TableBody>
 							{loading ? (
 								<TableRow>
-									<TableCell colSpan={visibleColCount}>
+									<TableCell colSpan={6}>
 										<Box p={3} textAlign="center" color="text.secondary">
 											Đang tải dữ liệu…
 										</Box>
@@ -252,26 +293,54 @@ export default function CustomersPage(): React.JSX.Element {
 													<Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
 														{row.name}
 													</Typography>
+													{row.email ? (
+														<Typography variant="caption" color="text.secondary">
+															{row.email}
+														</Typography>
+													) : null}
 												</Box>
 											</Stack>
-										</TableCell>
-
-										<TableCell align="center">{labelSport(row.sport || "")}</TableCell>
-
-										<TableCell>
-											<Typography variant="body2">{row.country || "-"}</Typography>
 										</TableCell>
 
 										<TableCell align="center">{row.gender ?? "-"}</TableCell>
 
 										<TableCell align="center">{row.age ?? "-"}</TableCell>
 
+										<TableCell>
+											<Typography variant="body2">{row.email || "-"}</Typography>
+										</TableCell>
+
+										<TableCell>
+											<Typography variant="body2">{row.phone || "-"}</Typography>
+										</TableCell>
+
+										<TableCell align="center">
+											<Chip
+												size="small"
+												label={row.status}
+												color={(row.status === "Đang hoạt động" ? "success" : "default") as any}
+												variant={row.status === "Đang hoạt động" ? "filled" : "outlined"}
+											/>
+										</TableCell>
+
 										<TableCell align="right" onClick={(e) => e.stopPropagation()}>
-											<Tooltip title="Chi tiết">
-												<IconButton size="small" onClick={() => goDetail(row.id)}>
-													<Eye />
-												</IconButton>
-											</Tooltip>
+											<Stack direction="row" spacing={0.5} justifyContent="flex-end">
+												<Tooltip title="Chi tiết">
+													<IconButton size="small" onClick={() => goDetail(row.id)}>
+														<Eye />
+													</IconButton>
+												</Tooltip>
+												<Tooltip title="Sửa">
+													<IconButton size="small" onClick={() => router.push(`/dashboard/customers/update/${row.id}`)}>
+														<PencilSimple />
+													</IconButton>
+												</Tooltip>
+												<Tooltip title="Xóa">
+													<IconButton size="small" color="error" onClick={() => onRequestDelete(row)}>
+														<Trash />
+													</IconButton>
+												</Tooltip>
+											</Stack>
 										</TableCell>
 									</TableRow>
 								))
@@ -279,7 +348,7 @@ export default function CustomersPage(): React.JSX.Element {
 
 							{!loading && rows.length === 0 && (
 								<TableRow>
-									<TableCell colSpan={visibleColCount}>
+									<TableCell colSpan={6}>
 										<Box p={3} textAlign="center" color="text.secondary">
 											Không có dữ liệu
 										</Box>
@@ -304,6 +373,35 @@ export default function CustomersPage(): React.JSX.Element {
 					labelRowsPerPage="Dòng / trang"
 				/>
 			</Paper>
+
+			<Dialog open={!!confirmUser} onClose={onCancelDelete} fullWidth maxWidth="xs">
+				<DialogTitle>Xác nhận xóa</DialogTitle>
+				<DialogContent>
+					<DialogContentText>
+						Bạn có chắc muốn xóa vận động viên
+						{confirmUser ? ` “${confirmUser.name}” (Mã: ${confirmUser.id})` : ""} khỏi danh sách?
+					</DialogContentText>
+				</DialogContent>
+				<DialogActions>
+					<Button onClick={onCancelDelete} variant="outlined" disabled={deleting}>
+						Hủy
+					</Button>
+					<Button onClick={onConfirmDelete} color="error" variant="contained" disabled={deleting}>
+						{deleting ? "Đang xóa..." : "Đồng ý"}
+					</Button>
+				</DialogActions>
+			</Dialog>
+
+			{toast ? (
+				<Snackbar
+					open
+					autoHideDuration={3000}
+					onClose={() => setToast(null)}
+					anchorOrigin={{ vertical: "top", horizontal: "right" }}
+				>
+					<Alert severity={toast.type}>{toast.message}</Alert>
+				</Snackbar>
+			) : null}
 		</Stack>
 	);
 }
