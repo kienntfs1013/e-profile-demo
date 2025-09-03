@@ -20,7 +20,7 @@ deploy:
       set -e
       echo "Deploying $SERVICE_NAME..."
       rm -rf $SERVICE_NAME || true
-      git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
+      git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/dreamaxcompany/e-profile-frontend.git $SERVICE_NAME
       cd $SERVICE_NAME
       git checkout main
       git pull origin main
@@ -29,10 +29,10 @@ deploy:
       docker stop $SERVICE_NAME || true
       docker rm $SERVICE_NAME || true
       docker build --build-arg NODE_VERSION=20.19.1 -t $SERVICE_NAME:1.0 .
-      
+
       echo "📦 Run container..."
       docker run -d --name $SERVICE_NAME -p 3000:3000 $SERVICE_NAME:1.0
-      
+
       docker ps -a
       echo "✅ Deploy thành công"
       EOSSH
