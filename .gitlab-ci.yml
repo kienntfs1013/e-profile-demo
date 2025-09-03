@@ -1,0 +1,38 @@
+stages:
+  - deploy
+
+deploy:
+  stage: deploy
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - main
+  before_script:
+    - apt-get update -qq
+    - apt-get install -qq git openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n" > ~/.ssh/config
+  script:
+    - |
+      ssh -o StrictHostKeyChecking=no -T $SSH_USER@$SSH_SERVER_IP <<EOSSH
+      set -e
+      echo "Deploying $SERVICE_NAME..."
+      rm -rf $SERVICE_NAME || true
+      git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
+      cd $SERVICE_NAME
+      git checkout main
+      git pull origin main
+
+      echo "🚀 Build Docker image..."
+      docker stop $SERVICE_NAME || true
+      docker rm $SERVICE_NAME || true
+      docker build --build-arg NODE_VERSION=20.19.1 -t $SERVICE_NAME:1.0 .
+      
+      echo "📦 Run container..."
+      docker run -d --name $SERVICE_NAME -p 3000:3000 $SERVICE_NAME:1.0
+      
+      docker ps -a
+      echo "✅ Deploy thành công"
+      EOSSH
