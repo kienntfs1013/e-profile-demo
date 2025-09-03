@@ -20,7 +20,7 @@ deploy:
       set -e
       echo "Deploying $SERVICE_NAME..."
       rm -rf $SERVICE_NAME || true
-      git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/dreamaxcompany/e-profile-frontend.git $SERVICE_NAME
+      git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
       cd $SERVICE_NAME
       git checkout main
       git pull origin main
