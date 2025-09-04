@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
 	buildImageUrl,
@@ -12,11 +13,30 @@ import {
 } from "@/services/user.service";
 import { Avatar, Box, Button, MenuItem, Paper, Stack, TextField, Typography, useMediaQuery } from "@mui/material";
 
-import { AchievementSection } from "@/components/customer-detail/achievement-section";
 import { GeneralSection } from "@/components/customer-detail/general-section";
-import { HealthSection } from "@/components/customer-detail/health-section";
 import { SectionCard } from "@/components/customer-detail/section-card";
-import { TrainingSection } from "@/components/customer-detail/training-section";
+
+const HealthSection = dynamic(
+	() => import("@/components/customer-detail/health-section").then((m) => m.HealthSection),
+	{
+		ssr: false,
+		loading: () => <Box p={2}>Đang tải mục Sức khỏe…</Box>,
+	}
+);
+const TrainingSection = dynamic(
+	() => import("@/components/customer-detail/training-section").then((m) => m.TrainingSection),
+	{
+		ssr: false,
+		loading: () => <Box p={2}>Đang tải mục Tập luyện…</Box>,
+	}
+);
+const AchievementSection = dynamic(
+	() => import("@/components/customer-detail/achievement-section").then((m) => m.AchievementSection),
+	{
+		ssr: false,
+		loading: () => <Box p={2}>Đang tải mục Thành tích…</Box>,
+	}
+);
 
 const sportLabel = (v?: string) => {
 	if (!v) return "-";
@@ -106,12 +126,13 @@ function calcAge(birthday?: string): number | undefined {
 
 export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 	const router = useRouter();
-	const isDesktop = useMediaQuery("(min-width:900px)");
+	const isDesktop = useMediaQuery("(min-width:900px)", { noSsr: true });
 
 	const [tab, setTab] = React.useState<TabKey>("general");
 	const [loading, setLoading] = React.useState(true);
 	const [user, setUser] = React.useState<DetailUser | undefined>(undefined);
 	const [viewerIsAthlete, setViewerIsAthlete] = React.useState(false);
+	const [isPending, startTransition] = React.useTransition();
 
 	React.useEffect(() => {
 		let cancelled = false;
@@ -231,7 +252,7 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 						{TABS.map((t) => (
 							<Button
 								key={t.key}
-								onClick={() => setTab(t.key)}
+								onClick={() => startTransition(() => setTab(t.key))}
 								variant={tab === t.key ? "contained" : "outlined"}
 								color="primary"
 								disableElevation
@@ -255,7 +276,7 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 						size="small"
 						label="Chọn mục"
 						value={tab}
-						onChange={(e) => setTab(e.target.value as TabKey)}
+						onChange={(e) => startTransition(() => setTab(e.target.value as TabKey))}
 					>
 						{TABS.map((t) => (
 							<MenuItem key={t.key} value={t.key}>
@@ -271,6 +292,11 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 				{!viewerIsAthlete && tab === "health" && <HealthSection user={user as any} />}
 				{!viewerIsAthlete && tab === "training" && <TrainingSection user={user as any} />}
 				{!viewerIsAthlete && tab === "achievement" && <AchievementSection user={user as any} />}
+				{isPending && (
+					<Box mt={2} color="text.secondary">
+						Đang chuyển mục…
+					</Box>
+				)}
 			</SectionCard>
 		</Stack>
 	);

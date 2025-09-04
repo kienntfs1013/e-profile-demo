@@ -1,493 +1,462 @@
 "use client";
 
 import * as React from "react";
-import { MenuItem } from "@mui/material";
+import { useRouter } from "next/navigation";
+import {
+	listArcheryPracticesByAthlete,
+	listBoxingPracticesByAthlete,
+	listShootingPracticesByAthlete,
+	listTaekwondoPracticesByAthlete,
+	type ArcheryPracticeDTO,
+	type BoxingPracticeDTO,
+	type ShootingPracticeDTO,
+	type TaekwondoPracticeDTO,
+} from "@/services/practice.service";
+import { fetchUserByIdFromList, getLoggedInUserId } from "@/services/user.service";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardHeader from "@mui/material/CardHeader";
-import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
-import Grid from "@mui/material/Grid";
-import IconButton from "@mui/material/IconButton";
-import List from "@mui/material/List";
-import ListItem from "@mui/material/ListItem";
-import ListItemAvatar from "@mui/material/ListItemAvatar";
-import ListItemText from "@mui/material/ListItemText";
+import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import type { SxProps } from "@mui/material/styles";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
+import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
-import { DotsThreeVerticalIcon } from "@phosphor-icons/react/dist/ssr/DotsThreeVertical";
-import { PencilSimple } from "@phosphor-icons/react/dist/ssr/PencilSimple";
 import dayjs from "dayjs";
 
 import "dayjs/locale/vi";
 
 dayjs.locale("vi");
 
-interface Product {
-	id: string;
-	image: string;
-	name: string;
-	updatedAt: Date;
-}
-
-interface LatestProductsProps {
-	products?: Product[];
-	sx?: SxProps;
-	title?: string;
-	updatedPrefix?: string;
-	hideRowMenu?: boolean;
-}
-
-function LatestProducts({
-	products = [],
+function PracticeTableCard({
+	title,
+	header,
+	children,
 	sx,
-	title = "Thiết bị đang sử dụng",
-	updatedPrefix = "Cập nhật",
-	hideRowMenu = false,
-}: LatestProductsProps): React.JSX.Element {
-	return (
-		<Card sx={sx}>
-			<CardHeader title={title} />
-			<Divider />
-			<List>
-				{products.map((product, index) => (
-					<ListItem divider={index < products.length - 1} key={product.id}>
-						<ListItemAvatar>
-							{product.image ? (
-								<Box
-									component="img"
-									src={product.image}
-									alt={product.name}
-									sx={{ borderRadius: 1, height: 48, width: 48, objectFit: "cover" }}
-								/>
-							) : (
-								<Box
-									sx={{
-										borderRadius: 1,
-										backgroundColor: "var(--mui-palette-neutral-200)",
-										height: 48,
-										width: 48,
-									}}
-								/>
-							)}
-						</ListItemAvatar>
-
-						<ListItemText
-							primary={product.name}
-							primaryTypographyProps={{ variant: "subtitle1" }}
-							secondary={`${updatedPrefix} ${dayjs(product.updatedAt).format("DD/MM/YYYY HH:mm")}`}
-							secondaryTypographyProps={{ variant: "body2" }}
-						/>
-
-						{!hideRowMenu && (
-							<IconButton edge="end" aria-label="tác vụ">
-								<DotsThreeVerticalIcon weight="bold" />
-							</IconButton>
-						)}
-					</ListItem>
-				))}
-			</List>
-		</Card>
-	);
-}
-
-const statusMap = {
-	pending: { label: "Tốt", color: "warning" as const },
-	delivered: { label: "Xuất sắc", color: "success" as const },
-	refunded: { label: "Cần cải thiện", color: "error" as const },
-};
-
-interface Order {
-	id: string;
-	customer?: { name: string };
-	amount: number;
-	createdAt: Date;
-	status: "pending" | "delivered" | "refunded";
-	statusText?: string;
-	time?: string;
-	xOffset?: number;
-	yOffset?: number;
-}
-
-interface LatestOrdersProps {
-	title?: string;
-	orders?: Order[];
+}: {
+	title: string;
+	header?: React.ReactNode;
+	children: React.ReactNode;
 	sx?: SxProps;
-	hideCustomer?: boolean;
-	showScore?: boolean;
-	showTime?: boolean;
-	showOffsets?: boolean;
-	orderHeader?: string;
-	customerHeader?: string;
-	dateHeader?: string;
-	scoreHeader?: string;
-	timeHeader?: string;
-	xHeader?: string;
-	yHeader?: string;
-	statusHeader?: string;
-}
-
-function LatestOrders({
-	title = "Điểm luyện tập",
-	orders = [],
-	sx,
-	hideCustomer = false,
-	showScore = false,
-	showTime = false,
-	showOffsets = false,
-	orderHeader = "Mã phát",
-	customerHeader = "Vận động viên",
-	dateHeader = "Ngày",
-	scoreHeader = "Số điểm",
-	timeHeader = "Thời gian",
-	xHeader = "Lệch X (mm)",
-	yHeader = "Lệch Y (mm)",
-	statusHeader = "Đánh giá",
-}: LatestOrdersProps): React.JSX.Element {
-	const minWidth =
-		800 + (hideCustomer ? 0 : 160) + (showScore ? 120 : 0) + (showTime ? 140 : 0) + (showOffsets ? 220 : 0);
-
+}) {
 	return (
-		<Card sx={sx}>
-			<CardHeader title={title} />
+		<Card sx={{ ...sx, minWidth: 0 }}>
+			<CardHeader title={title} action={header} />
 			<Divider />
-			<Box sx={{ overflowX: "auto" }}>
-				<Table sx={{ minWidth }}>
-					<TableHead>
-						<TableRow>
-							<TableCell>{orderHeader}</TableCell>
-							{!hideCustomer && <TableCell>{customerHeader}</TableCell>}
-							{showScore && <TableCell>{scoreHeader}</TableCell>}
-							{showTime && <TableCell>{timeHeader}</TableCell>}
-							{showOffsets && (
-								<>
-									<TableCell>{xHeader}</TableCell>
-									<TableCell>{yHeader}</TableCell>
-								</>
-							)}
-							<TableCell sortDirection="desc">{dateHeader}</TableCell>
-							<TableCell>{statusHeader}</TableCell>
-						</TableRow>
-					</TableHead>
-					<TableBody>
-						{orders.map((order) => {
-							const map = statusMap[order.status] ?? { label: "Không xác định", color: "default" as const };
-							const label = order.statusText ?? map.label;
-							const color = map.color as any;
-
-							return (
-								<TableRow hover key={order.id}>
-									<TableCell>{order.id}</TableCell>
-									{!hideCustomer && <TableCell>{order.customer?.name ?? ""}</TableCell>}
-									{showScore && <TableCell>{order.amount.toFixed(1)}</TableCell>}
-									{showTime && <TableCell>{order.time ?? ""}</TableCell>}
-									{showOffsets && (
-										<>
-											<TableCell>{order.xOffset !== undefined ? order.xOffset.toFixed(2) : ""}</TableCell>
-											<TableCell>{order.yOffset !== undefined ? order.yOffset.toFixed(2) : ""}</TableCell>
-										</>
-									)}
-									<TableCell>{dayjs(order.createdAt).format("MMM D, YYYY")}</TableCell>
-									<TableCell>
-										<Chip color={color} label={label} size="small" />
-									</TableCell>
-								</TableRow>
-							);
-						})}
-					</TableBody>
-				</Table>
-			</Box>
-		</Card>
-	);
-}
-
-type ScoreSort = "none" | "score-desc" | "score-asc";
-
-type RatingKey = "excellent" | "good" | "improve";
-const ratingLabel: Record<RatingKey, string> = {
-	excellent: "Xuất sắc",
-	good: "Tốt",
-	improve: "Cần cải thiện",
-};
-const ratingColor: Record<RatingKey, "success" | "warning" | "error"> = {
-	excellent: "success",
-	good: "warning",
-	improve: "error",
-};
-
-type ReviewItem = { id: string; name: string; rating: RatingKey; note: string };
-
-function CoachReviewCard({ items, onChange }: { items: ReviewItem[]; onChange: (next: ReviewItem[]) => void }) {
-	const [editing, setEditing] = React.useState(false);
-	const [draft, setDraft] = React.useState<ReviewItem[]>(items);
-
-	React.useEffect(() => {
-		if (!editing) setDraft(items);
-	}, [items, editing]);
-
-	const setDraftItem = (id: string, patch: Partial<ReviewItem>) =>
-		setDraft((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
-
-	return (
-		<Card>
-			<CardHeader title="Đánh giá chung của huấn luyện viên" />
-			<Divider />
-			<List>
-				{draft.map((it, idx) => (
-					<ListItem key={it.id} divider={idx < draft.length - 1} sx={{ alignItems: "stretch" }}>
-						<Box sx={{ width: "100%" }}>
-							<Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-								<ListItemText primary={it.name} primaryTypographyProps={{ fontWeight: 600 }} />
-								{editing ? (
-									<TextField
-										select
-										size="small"
-										value={it.rating}
-										onChange={(e) => setDraftItem(it.id, { rating: e.target.value as RatingKey })}
-										sx={{ minWidth: 180 }}
-									>
-										<MenuItem value="excellent">{ratingLabel.excellent}</MenuItem>
-										<MenuItem value="good">{ratingLabel.good}</MenuItem>
-										<MenuItem value="improve">{ratingLabel.improve}</MenuItem>
-									</TextField>
-								) : (
-									<Chip label={ratingLabel[it.rating]} color={ratingColor[it.rating]} size="small" />
-								)}
-							</Stack>
-
-							<Box sx={{ mt: 1 }}>
-								{editing ? (
-									<TextField
-										fullWidth
-										size="small"
-										multiline
-										minRows={2}
-										placeholder="Nhận xét chi tiết…"
-										value={it.note}
-										onChange={(e) => setDraftItem(it.id, { note: e.target.value })}
-									/>
-								) : (
-									<ListItemText secondary={it.note || "—"} secondaryTypographyProps={{ color: "text.secondary" }} />
-								)}
-							</Box>
-						</Box>
-					</ListItem>
-				))}
-			</List>
+			<Box sx={{ overflowX: "auto", width: "100%" }}>{children}</Box>
 		</Card>
 	);
 }
 
 export default function Page(): React.JSX.Element {
+	const router = useRouter();
+
 	const [sort, setSort] = React.useState<"newest" | "oldest">("newest");
-	const [scoreSort, setScoreSort] = React.useState<ScoreSort>("none");
 	const [date, setDate] = React.useState<string>(dayjs().format("YYYY-MM-DD"));
 	const [search, setSearch] = React.useState<string>("");
 
-	const [reviews, setReviews] = React.useState<ReviewItem[]>([
-		{ id: "r1", name: "Tư thế ngắm", rating: "good", note: "Ổn định, cần giữ vai thả lỏng hơn cuối loạt." },
-		{ id: "r2", name: "Kích hoạt cò", rating: "excellent", note: "Rất đều, hầu như không giật cò." },
-		{
-			id: "r3",
-			name: "Theo dõi sau bắn",
-			rating: "good",
-			note: "Giữ ngắm 1–1.5s sau phát bắn, tránh hạ súng quá sớm.",
-		},
-		{
-			id: "r4",
-			name: "Nhịp thở",
-			rating: "improve",
-			note: "Chưa đồng bộ với thời điểm bóp cò, cần tập thêm bài nín thở 6s.",
-		},
-		{
-			id: "r5",
-			name: "Tập trung tinh thần",
-			rating: "good",
-			note: "Giữ nhịp tốt, tránh nhìn bảng điểm sau từng phát.",
-		},
-	]);
+	const [tkd, setTkd] = React.useState<TaekwondoPracticeDTO[]>([]);
+	const [shoot, setShoot] = React.useState<ShootingPracticeDTO[]>([]);
+	const [box, setBox] = React.useState<BoxingPracticeDTO[]>([]);
+	const [arch, setArch] = React.useState<ArcheryPracticeDTO[]>([]);
 
-	const devices: Product[] = [
-		{
-			id: "DEV-005",
-			name: "SIUS HS10 Electronic Target",
-			image: "/assets/product-5.png",
-			updatedAt: dayjs(date).hour(9).minute(10).toDate(),
-		},
-		{
-			id: "DEV-004",
-			name: "Feinwerkbau 800X (Air Rifle .177)",
-			image: "/assets/product-4.png",
-			updatedAt: dayjs(date).hour(9).minute(5).toDate(),
-		},
-		{
-			id: "DEV-003",
-			name: "SCATT MX-W2 Training System",
-			image: "/assets/product-3.png",
-			updatedAt: dayjs(date).hour(9).minute(0).toDate(),
-		},
-		{
-			id: "DEV-002",
-			name: "Jacket & Glove ISSF (Thick)",
-			image: "/assets/product-2.png",
-			updatedAt: dayjs(date).hour(8).minute(55).toDate(),
-		},
-		{
-			id: "DEV-001",
-			name: "Air Cylinder 200 bar",
-			image: "/assets/product-1.png",
-			updatedAt: dayjs(date).hour(8).minute(50).toDate(),
-		},
-	];
+	const [loading, setLoading] = React.useState(false);
 
-	const rawShots = [
-		{ no: 1, score: 9.6, time: "49:48.00", x: 2.12, y: 2.68 },
-		{ no: 2, score: 10.6, time: "50:38.07", x: -0.57, y: -0.73 },
-		{ no: 3, score: 10.4, time: "51:23.07", x: -0.54, y: -1.3 },
-		{ no: 4, score: 10.7, time: "52:03.72", x: 0.48, y: 0.88 },
-		{ no: 5, score: 10.1, time: "52:50.98", x: 0.81, y: 1.28 },
-		{ no: 6, score: 10.3, time: "53:41.03", x: -3.61, y: -0.83 },
-		{ no: 7, score: 9.7, time: "54:31.34", x: 3.1, y: 0.57 },
-		{ no: 8, score: 10.2, time: "55:24.63", x: -1.25, y: 1.12 },
-		{ no: 9, score: 10.3, time: "56:24.78", x: -1.25, y: 1.12 },
-		{ no: 10, score: 9.8, time: "57:21.15", x: -2.39, y: 1.45 },
-		{ no: 11, score: 10.2, time: "58:11.67", x: -0.81, y: 1.63 },
-	];
+	const [page, setPage] = React.useState(0);
+	const [rowsPerPage, setRowsPerPage] = React.useState(5);
 
-	const toLabel = (k: "delivered" | "pending" | "refunded") =>
-		k === "delivered" ? "Xuất sắc" : k === "pending" ? "Tốt" : "Cần cải thiện";
+	const [athleteId, setAthleteId] = React.useState<number | undefined>(undefined);
+	const [sportKey, setSportKey] = React.useState<"taekwondo" | "shooting" | "boxing" | "archery" | "">("");
 
-	const orders: Order[] = React.useMemo(() => {
-		let list: Order[] = rawShots.map((s, idx) => {
-			const createdAt = dayjs(date)
-				.hour(8)
-				.minute(49)
-				.add(idx * 2, "minute")
-				.toDate();
-			const statusKey = (s.score >= 10.5 ? "delivered" : s.score >= 9.5 ? "pending" : "refunded") as
-				| "delivered"
-				| "pending"
-				| "refunded";
-			return {
-				id: `PHAT-${String(s.no).padStart(3, "0")}`,
-				customer: { name: "NGUYEN VAN A" },
-				amount: s.score,
-				time: s.time,
-				xOffset: s.x,
-				yOffset: s.y,
-				status: statusKey,
-				statusText: toLabel(statusKey),
-				createdAt,
-			};
+	React.useEffect(() => {
+		let cancelled = false;
+		async function loadUser() {
+			const uid = getLoggedInUserId();
+			if (!uid) return;
+			const user = await fetchUserByIdFromList(uid);
+			if (!user) return;
+			if (!cancelled) {
+				setAthleteId(Number((user as any)?.id ?? (user as any)?.user_id));
+				const s = String((user as any)?.sport ?? "")
+					.toLowerCase()
+					.trim();
+				if (s === "shooting" || s.includes("bắn súng")) setSportKey("shooting");
+				else if (s === "archery" || s.includes("bắn cung")) setSportKey("archery");
+				else if (s === "taekwondo") setSportKey("taekwondo");
+				else if (s === "boxing") setSportKey("boxing");
+			}
+		}
+		loadUser();
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	React.useEffect(() => {
+		let cancelled = false;
+		async function load() {
+			if (!athleteId) return;
+			try {
+				setLoading(true);
+				if (sportKey === "taekwondo") {
+					const r = await listTaekwondoPracticesByAthlete(athleteId, "id-desc");
+					if (!cancelled) setTkd(r);
+				} else if (sportKey === "shooting") {
+					const r = await listShootingPracticesByAthlete(athleteId, "id-desc");
+					if (!cancelled) setShoot(r);
+				} else if (sportKey === "boxing") {
+					const r = await listBoxingPracticesByAthlete(athleteId, "id-desc");
+					if (!cancelled) setBox(r);
+				} else if (sportKey === "archery") {
+					const r = await listArcheryPracticesByAthlete(athleteId, "id-desc");
+					if (!cancelled) setArch(r);
+				}
+			} finally {
+				if (!cancelled) setLoading(false);
+			}
+		}
+		load();
+		return () => {
+			cancelled = true;
+		};
+	}, [athleteId, sportKey]);
+
+	React.useEffect(() => {
+		setPage(0);
+	}, [sportKey, search, sort, date]);
+
+	const applyCommonSort = <T extends { created_at?: string; session_date?: string }>(arr: T[]) => {
+		const byTime = [...arr].sort((a, b) => {
+			const da = a.session_date || a.created_at || "";
+			const db = b.session_date || b.created_at || "";
+			return sort === "newest" ? db.localeCompare(da) : da.localeCompare(db);
 		});
+		const q = search.trim().toLowerCase();
+		const bySearch = q ? byTime.filter((r) => JSON.stringify(r).toLowerCase().includes(q)) : byTime;
+		const byDate = date
+			? bySearch.filter((r) => (r as any).session_date && dayjs((r as any).session_date).isSame(dayjs(date), "day"))
+			: bySearch;
+		return byDate;
+	};
 
-		if (search.trim()) {
-			const s = search.toLowerCase();
-			list = list.filter((row) => row.id.toLowerCase().includes(s));
-		}
+	const applyPagination = <T,>(rows: T[]) => rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
-		if (scoreSort === "score-desc") {
-			list.sort((a, b) => b.amount - a.amount || b.createdAt.getTime() - a.createdAt.getTime());
-		} else if (scoreSort === "score-asc") {
-			list.sort((a, b) => a.amount - b.amount || b.createdAt.getTime() - a.createdAt.getTime());
-		} else {
-			list.sort((a, b) =>
-				sort === "newest"
-					? b.createdAt.getTime() - a.createdAt.getTime()
-					: a.createdAt.getTime() - b.createdAt.getTime()
-			);
-		}
-
-		return list;
-	}, [date, search, sort, scoreSort]);
+	const handleAdd = () => {
+		if (!athleteId || !sportKey) return;
+		router.push(`/dashboard/customers/training/${sportKey}/add?athlete=${athleteId}`);
+	};
 
 	return (
-		<Grid container spacing={3}>
-			<Grid size={{ xs: 12 }}>
-				<Box
-					sx={{
-						display: "grid",
-						gap: 2,
-						gridTemplateColumns: {
-							xs: "1fr",
-							sm: "repeat(2, minmax(220px, 1fr))",
-							md: "repeat(auto-fit, minmax(240px, 1fr))",
-						},
-						alignItems: "center",
-					}}
-				>
-					<TextField
-						fullWidth
-						label="Tìm kiếm (mã phát)"
-						value={search}
-						onChange={(e) => setSearch(e.target.value)}
-						size="small"
-					/>
-					<TextField
-						type="date"
-						label="Ngày"
-						value={date}
-						onChange={(e) => setDate(e.target.value)}
-						InputLabelProps={{ shrink: true }}
-						size="small"
-					/>
-					<TextField
-						select
-						label="Sắp xếp theo ngày"
-						value={sort}
-						onChange={(e) => setSort(e.target.value as "newest" | "oldest")}
-						size="small"
-					>
-						<MenuItem value="newest">Mới nhất</MenuItem>
-						<MenuItem value="oldest">Cũ nhất</MenuItem>
-					</TextField>
-					<TextField
-						select
-						label="Sắp xếp theo điểm"
-						value={scoreSort}
-						onChange={(e) => setScoreSort(e.target.value as ScoreSort)}
-						size="small"
-					>
-						<MenuItem value="none">Không</MenuItem>
-						<MenuItem value="score-desc">Cao → Thấp</MenuItem>
-						<MenuItem value="score-asc">Thấp → Cao</MenuItem>
-					</TextField>
-				</Box>
-			</Grid>
-
-			<Grid size={{ xs: 12 }}>
-				<CoachReviewCard items={reviews} onChange={setReviews} />
-			</Grid>
-
-			<Grid size={{ lg: 4, md: 6, xs: 12 }}>
-				<LatestProducts title="Thiết bị đang sử dụng" products={devices} sx={{ height: "100%" }} />
-			</Grid>
-
-			<Grid size={{ lg: 8, md: 12, xs: 12 }}>
-				<LatestOrders
-					title="Điểm luyện tập"
-					orders={orders}
-					hideCustomer
-					showScore
-					showTime
-					showOffsets
-					orderHeader="Mã phát"
-					dateHeader="Ngày"
-					scoreHeader="Số điểm"
-					timeHeader="Thời gian"
-					xHeader="Lệch X (mm)"
-					yHeader="Lệch Y (mm)"
-					statusHeader="Đánh giá"
-					sx={{ height: "100%" }}
+		<Stack spacing={3}>
+			<Stack
+				direction="row"
+				spacing={2}
+				alignItems="center"
+				sx={{
+					width: "100%",
+					flexWrap: { xs: "wrap", md: "nowrap" },
+					"& > *": { height: 40 },
+				}}
+			>
+				<TextField
+					fullWidth
+					label="Tìm kiếm (theo nội dung)"
+					value={search}
+					onChange={(e) => setSearch(e.target.value)}
+					size="small"
+					sx={{ flex: "1 1 auto", minWidth: 240 }}
 				/>
-			</Grid>
-		</Grid>
+				<TextField
+					type="date"
+					label="Ngày tập"
+					value={date}
+					onChange={(e) => setDate(e.target.value)}
+					InputLabelProps={{ shrink: true }}
+					size="small"
+					sx={{ width: { xs: "100%", md: 220 }, flex: { xs: "1 1 220px", md: "0 0 220px" } }}
+				/>
+				<Button
+					variant="outlined"
+					size="small"
+					onClick={() => setDate("")}
+					sx={{ flex: { xs: "0 0 auto", md: "0 0 110px" }, px: 2 }}
+				>
+					Xóa ngày
+				</Button>
+				<TextField
+					select
+					label="Sắp xếp thời gian"
+					value={sort}
+					onChange={(e) => setSort(e.target.value as "newest" | "oldest")}
+					size="small"
+					sx={{ width: { xs: "100%", md: 200 }, flex: { xs: "1 1 200px", md: "0 0 200px" } }}
+				>
+					<MenuItem value="newest">Mới nhất</MenuItem>
+					<MenuItem value="oldest">Cũ nhất</MenuItem>
+				</TextField>
+			</Stack>
+
+			{sportKey === "taekwondo" && (
+				<PracticeTableCard
+					title="Taekwondo — Buổi tập"
+					header={
+						<Button onClick={handleAdd} startIcon={<></>} size="small" variant="contained">
+							Thêm mới
+						</Button>
+					}
+				>
+					<Table sx={{ minWidth: 980 }}>
+						<TableHead>
+							<TableRow>
+								<TableCell>Mã</TableCell>
+								<TableCell>Ngày tập</TableCell>
+								<TableCell>Kỹ thuật</TableCell>
+								<TableCell>Drills</TableCell>
+								<TableCell>Đấu đối kháng (phút)</TableCell>
+								<TableCell>Bài thể lực</TableCell>
+								<TableCell>Ghi chú</TableCell>
+							</TableRow>
+						</TableHead>
+						<TableBody>
+							{applyPagination(applyCommonSort(tkd)).map((r) => (
+								<TableRow key={r.id} hover>
+									<TableCell>{r.id}</TableCell>
+									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
+									<TableCell>{r.technique || "-"}</TableCell>
+									<TableCell>{r.drills_practiced || "-"}</TableCell>
+									<TableCell>{r.sparring_duration ?? "-"}</TableCell>
+									<TableCell>{r.fitness_exercises || "-"}</TableCell>
+									<TableCell>{r.notes || "-"}</TableCell>
+								</TableRow>
+							))}
+							{!loading && tkd.length === 0 && (
+								<TableRow>
+									<TableCell colSpan={7}>
+										<Box p={2} textAlign="center" color="text.secondary">
+											Không có dữ liệu
+										</Box>
+									</TableCell>
+								</TableRow>
+							)}
+						</TableBody>
+					</Table>
+					<TablePagination
+						component="div"
+						count={applyCommonSort(tkd).length}
+						page={page}
+						rowsPerPage={rowsPerPage}
+						onPageChange={(_, p) => setPage(p)}
+						onRowsPerPageChange={(e) => {
+							setRowsPerPage(parseInt(e.target.value, 10));
+							setPage(0);
+						}}
+						rowsPerPageOptions={[5, 10, 25]}
+						labelRowsPerPage="Dòng / trang"
+					/>
+				</PracticeTableCard>
+			)}
+
+			{sportKey === "shooting" && (
+				<PracticeTableCard
+					title="Bắn súng — Buổi tập"
+					header={
+						<Button onClick={handleAdd} startIcon={<></>} size="small" variant="contained">
+							Thêm mới
+						</Button>
+					}
+				>
+					<Table sx={{ minWidth: 1180 }}>
+						<TableHead>
+							<TableRow>
+								<TableCell>Mã</TableCell>
+								<TableCell>Ngày tập</TableCell>
+								<TableCell>Loại súng</TableCell>
+								<TableCell>Cự ly</TableCell>
+								<TableCell>Loại bia</TableCell>
+								<TableCell>Số phát bắn</TableCell>
+								<TableCell>Trúng đích</TableCell>
+								<TableCell>Độ chính xác (%)</TableCell>
+								<TableCell>Ghi chú</TableCell>
+							</TableRow>
+						</TableHead>
+						<TableBody>
+							{applyPagination(applyCommonSort(shoot)).map((r) => (
+								<TableRow key={r.id} hover>
+									<TableCell>{r.id}</TableCell>
+									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
+									<TableCell>{r.weapon_type || "-"}</TableCell>
+									<TableCell>{r.distance ?? "-"}</TableCell>
+									<TableCell>{r.target_type || "-"}</TableCell>
+									<TableCell>{r.shots_fired ?? "-"}</TableCell>
+									<TableCell>{r.shots_hit ?? "-"}</TableCell>
+									<TableCell>{r.accuracy ?? "-"}</TableCell>
+									<TableCell>{r.notes || "-"}</TableCell>
+								</TableRow>
+							))}
+							{!loading && shoot.length === 0 && (
+								<TableRow>
+									<TableCell colSpan={9}>
+										<Box p={2} textAlign="center" color="text.secondary">
+											Không có dữ liệu
+										</Box>
+									</TableCell>
+								</TableRow>
+							)}
+						</TableBody>
+					</Table>
+					<TablePagination
+						component="div"
+						count={applyCommonSort(shoot).length}
+						page={page}
+						rowsPerPage={rowsPerPage}
+						onPageChange={(_, p) => setPage(p)}
+						onRowsPerPageChange={(e) => {
+							setRowsPerPage(parseInt(e.target.value, 10));
+							setPage(0);
+						}}
+						rowsPerPageOptions={[5, 10, 25]}
+						labelRowsPerPage="Dòng / trang"
+					/>
+				</PracticeTableCard>
+			)}
+
+			{sportKey === "boxing" && (
+				<PracticeTableCard
+					title="Boxing — Buổi tập"
+					header={
+						<Button onClick={handleAdd} startIcon={<></>} size="small" variant="contained">
+							Thêm mới
+						</Button>
+					}
+				>
+					<Table sx={{ minWidth: 1180 }}>
+						<TableHead>
+							<TableRow>
+								<TableCell>Mã</TableCell>
+								<TableCell>Hiệp</TableCell>
+								<TableCell>Cú ra đòn</TableCell>
+								<TableCell>Đòn trúng</TableCell>
+								<TableCell>Phòng thủ (%)</TableCell>
+								<TableCell>Footwork điểm</TableCell>
+								<TableCell>Đối luyện với</TableCell>
+								<TableCell>Ghi chú</TableCell>
+								<TableCell>Ngày tạo</TableCell>
+							</TableRow>
+						</TableHead>
+						<TableBody>
+							{applyPagination(applyCommonSort(box)).map((r) => (
+								<TableRow key={r.id} hover>
+									<TableCell>{r.id}</TableCell>
+									<TableCell>{r.round_number ?? "-"}</TableCell>
+									<TableCell>{r.punches_thrown ?? "-"}</TableCell>
+									<TableCell>{r.punches_landed ?? "-"}</TableCell>
+									<TableCell>{r.defense_success_rate ?? "-"}</TableCell>
+									<TableCell>{r.footwork_score ?? "-"}</TableCell>
+									<TableCell>{r.sparring_partner || "-"}</TableCell>
+									<TableCell>{r.notes || "-"}</TableCell>
+									<TableCell>{r.created_at ? dayjs(r.created_at).format("DD/MM/YYYY") : "-"}</TableCell>
+								</TableRow>
+							))}
+							{!loading && box.length === 0 && (
+								<TableRow>
+									<TableCell colSpan={9}>
+										<Box p={2} textAlign="center" color="text.secondary">
+											Không có dữ liệu
+										</Box>
+									</TableCell>
+								</TableRow>
+							)}
+						</TableBody>
+					</Table>
+					<TablePagination
+						component="div"
+						count={applyCommonSort(box).length}
+						page={page}
+						rowsPerPage={rowsPerPage}
+						onPageChange={(_, p) => setPage(p)}
+						onRowsPerPageChange={(e) => {
+							setRowsPerPage(parseInt(e.target.value, 10));
+							setPage(0);
+						}}
+						rowsPerPageOptions={[5, 10, 25]}
+						labelRowsPerPage="Dòng / trang"
+					/>
+				</PracticeTableCard>
+			)}
+
+			{sportKey === "archery" && (
+				<PracticeTableCard
+					title="Bắn cung — Buổi tập"
+					header={
+						<Button onClick={handleAdd} startIcon={<></>} size="small" variant="contained">
+							Thêm mới
+						</Button>
+					}
+				>
+					<Table sx={{ minWidth: 1180 }}>
+						<TableHead>
+							<TableRow>
+								<TableCell>Mã</TableCell>
+								<TableCell>Ngày tập</TableCell>
+								<TableCell>Cự ly (m)</TableCell>
+								<TableCell>End số</TableCell>
+								<TableCell>Mũi tên số</TableCell>
+								<TableCell>Điểm</TableCell>
+								<TableCell>Lệch X</TableCell>
+								<TableCell>Lệch Y</TableCell>
+							</TableRow>
+						</TableHead>
+						<TableBody>
+							{applyPagination(applyCommonSort(arch)).map((r) => (
+								<TableRow key={r.id} hover>
+									<TableCell>{r.id}</TableCell>
+									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
+									<TableCell>{r.target_distance ?? "-"}</TableCell>
+									<TableCell>{r.end_number ?? "-"}</TableCell>
+									<TableCell>{r.arrow_number ?? "-"}</TableCell>
+									<TableCell>{r.score ?? "-"}</TableCell>
+									<TableCell>{r.x_coord ?? "-"}</TableCell>
+									<TableCell>{r.y_coord ?? "-"}</TableCell>
+								</TableRow>
+							))}
+							{!loading && arch.length === 0 && (
+								<TableRow>
+									<TableCell colSpan={8}>
+										<Box p={2} textAlign="center" color="text.secondary">
+											Không có dữ liệu
+										</Box>
+									</TableCell>
+								</TableRow>
+							)}
+						</TableBody>
+					</Table>
+					<TablePagination
+						component="div"
+						count={applyCommonSort(arch).length}
+						page={page}
+						rowsPerPage={rowsPerPage}
+						onPageChange={(_, p) => setPage(p)}
+						onRowsPerPageChange={(e) => {
+							setRowsPerPage(parseInt(e.target.value, 10));
+							setPage(0);
+						}}
+						rowsPerPageOptions={[5, 10, 25]}
+						labelRowsPerPage="Dòng / trang"
+					/>
+				</PracticeTableCard>
+			)}
+
+			{!sportKey && (
+				<Box p={2} textAlign="center" color="text.secondary" border="1px dashed" borderRadius={1.5}>
+					Không xác định bộ môn của vận động viên.
+				</Box>
+			)}
+		</Stack>
 	);
 }
