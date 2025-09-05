@@ -3,7 +3,7 @@
 import * as React from "react";
 import RouterLink from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { fetchUserByIdFromList, getLoggedInUserId, getUserById } from "@/services/user.service";
+import { fetchUserByIdFromList, getLoggedInUserId, listUsers } from "@/services/user.service";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
 import Drawer from "@mui/material/Drawer";
@@ -48,6 +48,45 @@ const filterItemsByRole = (items: NavItemConfig[], role: RoleView | null) => {
 	return items.filter((it) => !hide.has(it.key));
 };
 
+function decodeJwtPayload(t?: string) {
+	try {
+		if (!t) return {};
+		const p = t.split(".")[1];
+		if (!p) return {};
+		const json = atob(p.replace(/-/g, "+").replace(/_/g, "/"));
+		return JSON.parse(json || "{}") || {};
+	} catch {
+		return {};
+	}
+}
+
+function readLocalAuth() {
+	try {
+		const idCandidate =
+			Number(localStorage.getItem("uid")) ||
+			Number(localStorage.getItem("user_id")) ||
+			Number(localStorage.getItem("userId"));
+		const id = Number.isFinite(idCandidate) && idCandidate > 0 ? idCandidate : undefined;
+		let email: string | undefined;
+		const cu = localStorage.getItem("currentUser") || localStorage.getItem("auth_user") || localStorage.getItem("user");
+		if (cu) {
+			try {
+				const obj = JSON.parse(cu);
+				email = obj?.email || obj?.user?.email;
+			} catch {}
+		}
+		const tok =
+			localStorage.getItem("token") || localStorage.getItem("access_token") || localStorage.getItem("accessToken");
+		if (!email && tok) {
+			const payload = decodeJwtPayload(tok);
+			email = payload?.email || payload?.upn || payload?.preferred_username || undefined;
+		}
+		return { id, email };
+	} catch {
+		return {};
+	}
+}
+
 export interface MobileNavProps {
 	onClose?: () => void;
 	open?: boolean;
@@ -61,10 +100,20 @@ export function MobileNav({ open, onClose }: MobileNavProps): React.JSX.Element 
 		let off = false;
 		(async () => {
 			try {
-				const id = getLoggedInUserId?.();
-				if (!id) return;
-				const me = (await getUserById(id).catch(() => null)) ?? (await fetchUserByIdFromList(id).catch(() => null));
-				if (!off && me) setViewerRole(roleTypeFrom(me.role));
+				let id = getLoggedInUserId?.();
+				const localAuth = readLocalAuth();
+				if (!id && localAuth.id) id = localAuth.id;
+
+				let me: any | null = null;
+				if (id) {
+					const rows = await listUsers({ id }).catch(() => []);
+					me = rows?.[0] ?? (await fetchUserByIdFromList(id).catch(() => null));
+				} else if (localAuth.email) {
+					const rows = await listUsers({ email: localAuth.email }).catch(() => []);
+					me = rows?.[0] ?? null;
+				}
+				if (!me) return;
+				if (!off) setViewerRole(roleTypeFrom(me.role));
 			} catch {}
 		})();
 		return () => {
@@ -134,7 +183,6 @@ function renderNavItems({
 		acc.push(<NavItem key={key} pathname={pathname} onClose={onClose} {...item} />);
 		return acc;
 	}, []);
-
 	return (
 		<Stack component="ul" spacing={1} sx={{ listStyle: "none", m: 0, p: 0 }}>
 			{children}
@@ -223,13 +271,7 @@ function NavItem({
 				}}
 			>
 				<Box sx={{ alignItems: "center", display: "flex", justifyContent: "center", flex: "0 0 auto" }}>
-					{Icon ? (
-						<Icon
-							fill={active ? "var(--NavItem-icon-active-color)" : "var(--NavItem-icon-color)"}
-							fontSize="var(--icon-fontSize-md)"
-							weight={active ? "fill" : undefined}
-						/>
-					) : null}
+					{Icon ? <Icon /> : null}
 				</Box>
 				<Box sx={{ flex: "1 1 auto" }}>
 					<Typography

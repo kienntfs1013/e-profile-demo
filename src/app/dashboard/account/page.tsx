@@ -1,12 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { uploadFile } from "@/services/upload.service";
 import {
 	buildImageUrl,
 	fetchAthleteByUserId,
 	fetchUserByIdFromList,
 	getLoggedInUserId,
+	listUsers,
 	mapGenderToVN,
 	mapNationToCountry,
 	mapSportToVN,
@@ -25,6 +27,7 @@ import CardContent from "@mui/material/CardContent";
 import CardHeader from "@mui/material/CardHeader";
 import Divider from "@mui/material/Divider";
 import FormControl from "@mui/material/FormControl";
+import FormHelperText from "@mui/material/FormHelperText";
 import InputLabel from "@mui/material/InputLabel";
 import LinearProgress from "@mui/material/LinearProgress";
 import MenuItem from "@mui/material/MenuItem";
@@ -32,13 +35,6 @@ import OutlinedInput from "@mui/material/OutlinedInput";
 import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import { ArrowDownRight } from "@phosphor-icons/react/dist/ssr/ArrowDownRight";
-import { ArrowUpRight } from "@phosphor-icons/react/dist/ssr/ArrowUpRight";
-import { Barbell } from "@phosphor-icons/react/dist/ssr/Barbell";
-import { HeartbeatIcon } from "@phosphor-icons/react/dist/ssr/Heartbeat";
-import { ListBullets } from "@phosphor-icons/react/dist/ssr/ListBullets";
-import { MedalIcon } from "@phosphor-icons/react/dist/ssr/Medal";
 
 const nations = [{ value: "VIE", label: "Việt Nam" }] as const;
 const sports = [
@@ -47,66 +43,6 @@ const sports = [
 	{ value: "taekwondo", label: "Taekwondo" },
 	{ value: "boxing", label: "Boxing" },
 ] as const;
-
-function SummaryCard(props: {
-	title: string;
-	value: string;
-	icon: React.ReactNode;
-	chip?: React.ReactNode;
-	progress?: number;
-	upDown?: "up" | "down";
-	deltaText?: string;
-	avatarBg: string;
-	avatarFg?: string;
-}) {
-	const { title, value, icon, chip, progress, upDown, deltaText, avatarBg, avatarFg = "#fff" } = props;
-	return (
-		<Card sx={{ flex: 1, minWidth: 260, borderRadius: 3 }}>
-			<CardContent>
-				<Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-					<Typography variant="overline" color="text.secondary" letterSpacing={1}>
-						{title}
-					</Typography>
-					<Avatar
-						sx={{
-							width: 56,
-							height: 56,
-							bgcolor: "transparent",
-							background: avatarBg,
-							color: avatarFg,
-							boxShadow: "0 6px 16px rgba(0,0,0,.15)",
-						}}
-					>
-						{icon}
-					</Avatar>
-				</Stack>
-				<Typography variant="h4" fontWeight={800} sx={{ mb: progress != null ? 1 : 0.5 }}>
-					{value}
-				</Typography>
-				{progress != null ? (
-					<LinearProgress variant="determinate" value={progress} sx={{ height: 6, borderRadius: 3, mb: 1 }} />
-				) : null}
-				<Stack direction="row" spacing={1} alignItems="center">
-					{upDown === "up" ? (
-						<ArrowUpRight size={18} color="#22c55e" />
-					) : upDown === "down" ? (
-						<ArrowDownRight size={18} color="#ef4444" />
-					) : null}
-					{deltaText ? (
-						<Typography variant="body2" sx={{ color: upDown === "down" ? "#ef4444" : "#22c55e" }}>
-							{deltaText}
-						</Typography>
-					) : null}
-					{chip ? (
-						<Typography variant="body2" color="text.secondary">
-							{chip}
-						</Typography>
-					) : null}
-				</Stack>
-			</CardContent>
-		</Card>
-	);
-}
 
 type FormState = {
 	avatar?: string;
@@ -142,9 +78,14 @@ function take<T>(...vals: (T | undefined | null)[]): T | undefined {
 	for (const v of vals) if (v != null) return v as T;
 	return undefined;
 }
+function isValidEmail(v: string): boolean {
+	const re = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+	return re.test(String(v || "").trim());
+}
 
 export default function Page(): React.JSX.Element {
 	const router = useRouter();
+	const searchParams = useSearchParams();
 
 	const [loading, setLoading] = React.useState(true);
 	const [saving, setSaving] = React.useState(false);
@@ -171,13 +112,48 @@ export default function Page(): React.JSX.Element {
 	});
 
 	const [avatarUrl, setAvatarUrl] = React.useState<string | undefined>(undefined);
+	const [uploadingAvatar, setUploadingAvatar] = React.useState(false);
+	const [uploadedAvatarPath, setUploadedAvatarPath] = React.useState<string>();
+	const [emailExists, setEmailExists] = React.useState(false);
+	const [phoneExists, setPhoneExists] = React.useState(false);
+	const [emailChecking, setEmailChecking] = React.useState(false);
+	const [phoneChecking, setPhoneChecking] = React.useState(false);
+
 	const fileRef = React.useRef<HTMLInputElement>(null);
 	const onPickFile = () => fileRef.current?.click();
-	const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+
+	const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const f = e.target.files?.[0];
-		if (f) setAvatarUrl(URL.createObjectURL(f));
+		if (!f) return;
+		const previewUrl = URL.createObjectURL(f);
+		setAvatarUrl(previewUrl);
+		try {
+			setUploadingAvatar(true);
+			const res = await uploadFile(f);
+			if (!res.ok) throw new Error(res.error || res.message || "Upload thất bại");
+			if (res.url) setAvatarUrl(res.url);
+			if (res.path) setUploadedAvatarPath(res.path);
+			setToast({ type: "success", message: "Tải ảnh thành công" });
+		} catch (err: any) {
+			setToast({ type: "error", message: err?.message || "Không upload được ảnh" });
+		} finally {
+			setUploadingAvatar(false);
+		}
 	};
+
 	const change = <K extends keyof FormState>(key: K, val: FormState[K]) => setForm((p) => ({ ...p, [key]: val }));
+
+	const resolveUserId = React.useCallback(() => {
+		const fromQuery = Number(searchParams.get("uid") || "");
+		if (!Number.isNaN(fromQuery) && fromQuery > 0) return fromQuery;
+		return getLoggedInUserId();
+	}, [searchParams]);
+
+	const loadUser = React.useCallback(async (uid: number) => {
+		const viaList = await listUsers({ id: uid });
+		if (viaList && viaList.length) return viaList[0];
+		return await fetchUserByIdFromList(uid);
+	}, []);
 
 	React.useEffect(() => {
 		let cancelled = false;
@@ -186,18 +162,15 @@ export default function Page(): React.JSX.Element {
 				setLoading(true);
 				setFetchError(null);
 
-				const uid = getLoggedInUserId();
+				const uid = resolveUserId();
 				if (!uid) {
 					setFetchError("Không xác định được ID người dùng");
 					return;
 				}
 
-				const [user, athlete] = await Promise.all([
-					fetchUserByIdFromList(uid),
-					fetchAthleteByUserId(uid).catch(() => null),
-				]);
+				const [user, athlete] = await Promise.all([loadUser(uid), fetchAthleteByUserId(uid).catch(() => null)]);
 				if (!user) {
-					setFetchError("Không tìm thấy người dùng");
+					setFetchError(`Không tìm thấy người dùng`);
 					return;
 				}
 
@@ -224,7 +197,7 @@ export default function Page(): React.JSX.Element {
 
 				const avatar =
 					buildImageUrl(user.profile_picture_path) ||
-					buildImageUrl(athlete?.athlete_profile_picture_path) ||
+					buildImageUrl((athlete as AthleteDTO | null)?.athlete_profile_picture_path) ||
 					"/assets/noimagefound.png";
 
 				const roleInt = parseRoleToInt(user.role);
@@ -243,14 +216,15 @@ export default function Page(): React.JSX.Element {
 					address: user.address,
 					district: user.district,
 					city: user.city,
-					national_id_card_no: user.national_id_card_no,
-					passport_no: user.passport_no,
-					passport_expiry_date: user.passport_expiry_date,
+					national_id_card_no: user.national_id_card_no || "",
+					passport_no: user.passport_no || "",
+					passport_expiry_date: user.passport_expiry_date ? String(user.passport_expiry_date).slice(0, 10) : "",
 				};
 
 				if (!cancelled) {
 					setForm(nextForm);
 					setAvatarUrl(nextForm.avatar);
+					setUploadedAvatarPath(undefined);
 				}
 			} catch (e: any) {
 				if (!cancelled) setFetchError(e?.message || "Không tải được dữ liệu");
@@ -262,6 +236,40 @@ export default function Page(): React.JSX.Element {
 		return () => {
 			cancelled = true;
 		};
+	}, [loadUser, resolveUserId]);
+
+	const checkEmailExists = React.useCallback(async (email: string, excludeId?: number) => {
+		const v = String(email || "").trim();
+		if (!v || !isValidEmail(v)) {
+			setEmailExists(false);
+			return false;
+		}
+		try {
+			setEmailChecking(true);
+			const rows = await listUsers({ email: v });
+			const found = rows.some((u) => (u.email || "").toLowerCase() === v.toLowerCase() && u.id !== excludeId);
+			setEmailExists(found);
+			return found;
+		} finally {
+			setEmailChecking(false);
+		}
+	}, []);
+
+	const checkPhoneExists = React.useCallback(async (phone: string, excludeId?: number) => {
+		const v = String(phone || "").trim();
+		if (!v) {
+			setPhoneExists(false);
+			return false;
+		}
+		try {
+			setPhoneChecking(true);
+			const rows = await listUsers({ phoneNumber: v });
+			const found = rows.some((u) => (u.phoneNumber || "") === v && u.id !== excludeId);
+			setPhoneExists(found);
+			return found;
+		} finally {
+			setPhoneChecking(false);
+		}
 	}, []);
 
 	const handleSave = async () => {
@@ -269,16 +277,32 @@ export default function Page(): React.JSX.Element {
 			setSaving(true);
 			setToast(null);
 
-			const userId = getLoggedInUserId();
+			const userId = resolveUserId();
 			if (!userId) {
 				setToast({ type: "error", message: "Không xác định được ID người dùng" });
 				return;
 			}
 
-			const current = await fetchUserByIdFromList(userId);
+			const current = await loadUser(userId);
 			if (!current) {
 				setToast({ type: "error", message: "Không tìm thấy người dùng" });
 				return;
+			}
+
+			if (form.email && isValidEmail(form.email)) {
+				const dupEmail = await checkEmailExists(form.email, userId);
+				if (dupEmail) {
+					setToast({ type: "error", message: "Email đã tồn tại" });
+					return;
+				}
+			}
+
+			if (form.phone) {
+				const dupPhone = await checkPhoneExists(form.phone, userId);
+				if (dupPhone) {
+					setToast({ type: "error", message: "Số điện thoại đã tồn tại" });
+					return;
+				}
 			}
 
 			await updateUserByIdMerged(userId, {
@@ -291,7 +315,7 @@ export default function Page(): React.JSX.Element {
 				sport: mapSportToVN(form.sport) ?? current.sport,
 				country: mapNationToCountry(form.nation) ?? current.country ?? "Việt Nam",
 				role: form.role !== "" ? Number(form.role) : parseRoleToInt(current.role),
-				profile_picture_path: current.profile_picture_path,
+				profile_picture_path: uploadedAvatarPath ?? current.profile_picture_path,
 				address: form.address || current.address,
 				district: form.district || current.district,
 				city: form.city || current.city,
@@ -304,13 +328,13 @@ export default function Page(): React.JSX.Element {
 			setFetchError(null);
 			setToast({ type: "success", message: "Đã lưu thay đổi" });
 
-			window.setTimeout(() => {
-				if (typeof window !== "undefined" && window.history.length > 1) {
-					router.back();
+			setTimeout(() => {
+				if (typeof window !== "undefined") {
+					window.location.reload();
 				} else {
-					router.push("/");
+					router.refresh();
 				}
-			}, 1200);
+			}, 600);
 		} catch (e: any) {
 			const msg = e?.response?.data?.message || e?.message || "Lỗi kết nối Cơ Sở Dữ Liệu";
 			setToast({ type: "error", message: msg });
@@ -333,12 +357,20 @@ export default function Page(): React.JSX.Element {
 						<Stack spacing={2}>
 							<Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
 								<Avatar src={avatarUrl} sx={{ width: 96, height: 96 }} />
-								<Stack direction="row" spacing={1}>
-									<Button variant="outlined" onClick={onPickFile}>
-										Tải ảnh lên
+								<Stack direction="row" spacing={1} alignItems="center">
+									<Button variant="outlined" onClick={onPickFile} disabled={uploadingAvatar}>
+										{uploadingAvatar ? "Đang tải ảnh..." : "Tải ảnh lên"}
 									</Button>
 									{avatarUrl ? (
-										<Button variant="text" color="error" onClick={() => setAvatarUrl(undefined)}>
+										<Button
+											variant="text"
+											color="error"
+											onClick={() => {
+												setAvatarUrl(undefined);
+												setUploadedAvatarPath(undefined);
+											}}
+											disabled={uploadingAvatar}
+										>
 											Xóa ảnh
 										</Button>
 									) : null}
@@ -376,7 +408,7 @@ export default function Page(): React.JSX.Element {
 									</FormControl>
 								</Box>
 								<Box className="field">
-									<FormControl fullWidth>
+									<FormControl fullWidth error={emailExists}>
 										<InputLabel>Email</InputLabel>
 										<OutlinedInput
 											type="email"
@@ -384,11 +416,21 @@ export default function Page(): React.JSX.Element {
 											name="email"
 											value={form.email}
 											onChange={(e) => change("email", e.target.value)}
+											onBlur={async () => {
+												const id = resolveUserId();
+												if (form.email && isValidEmail(form.email)) await checkEmailExists(form.email, id || undefined);
+												else setEmailExists(false);
+											}}
 										/>
+										{emailChecking ? (
+											<FormHelperText>Đang kiểm tra email…</FormHelperText>
+										) : emailExists ? (
+											<FormHelperText>Email đã tồn tại</FormHelperText>
+										) : null}
 									</FormControl>
 								</Box>
 								<Box className="field">
-									<FormControl fullWidth>
+									<FormControl fullWidth error={phoneExists}>
 										<InputLabel>Số điện thoại</InputLabel>
 										<OutlinedInput
 											label="Số điện thoại"
@@ -396,7 +438,17 @@ export default function Page(): React.JSX.Element {
 											value={form.phone}
 											inputProps={{ inputMode: "tel" }}
 											onChange={(e) => change("phone", e.target.value)}
+											onBlur={async () => {
+												const id = resolveUserId();
+												if (form.phone) await checkPhoneExists(form.phone, id || undefined);
+												else setPhoneExists(false);
+											}}
 										/>
+										{phoneChecking ? (
+											<FormHelperText>Đang kiểm tra số điện thoại…</FormHelperText>
+										) : phoneExists ? (
+											<FormHelperText>Số điện thoại đã tồn tại</FormHelperText>
+										) : null}
 									</FormControl>
 								</Box>
 								<Box className="field">
@@ -452,12 +504,7 @@ export default function Page(): React.JSX.Element {
 								<Box className="field">
 									<FormControl fullWidth required>
 										<InputLabel>Bộ môn</InputLabel>
-										<Select
-											label="Bộ môn"
-											name="sport"
-											value={form.sport}
-											onChange={(e) => change("sport", e.target.value as FormState["sport"])}
-										>
+										<Select label="Bộ môn" name="sport" value={form.sport} disabled>
 											<MenuItem value="" disabled>
 												-- Chọn bộ môn --
 											</MenuItem>
@@ -469,16 +516,10 @@ export default function Page(): React.JSX.Element {
 										</Select>
 									</FormControl>
 								</Box>
-
 								<Box className="field">
 									<FormControl fullWidth required>
 										<InputLabel>Vai trò</InputLabel>
-										<Select
-											label="Vai trò"
-											name="role"
-											value={form.role === "" ? "" : Number(form.role)}
-											onChange={(e) => change("role", Number(e.target.value) as 1 | 2)}
-										>
+										<Select label="Vai trò" name="role" value={form.role === "" ? "" : Number(form.role)} disabled>
 											<MenuItem value="" disabled>
 												-- Chọn vai trò --
 											</MenuItem>
@@ -487,7 +528,6 @@ export default function Page(): React.JSX.Element {
 										</Select>
 									</FormControl>
 								</Box>
-
 								<Box className="field">
 									<FormControl fullWidth>
 										<InputLabel>Địa chỉ</InputLabel>
@@ -559,10 +599,9 @@ export default function Page(): React.JSX.Element {
 						</Stack>
 					)}
 				</CardContent>
-
 				<Divider />
 				<CardActions sx={{ justifyContent: "flex-end" }}>
-					<Button variant="contained" type="button" disabled={saving} onClick={handleSave}>
+					<Button variant="contained" type="button" disabled={saving || uploadingAvatar} onClick={handleSave}>
 						{saving ? "Đang lưu..." : "Lưu thay đổi"}
 					</Button>
 				</CardActions>
