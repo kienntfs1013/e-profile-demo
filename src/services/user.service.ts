@@ -1,5 +1,7 @@
+// src/services/user.service.ts
 import { api } from "@/lib/api/client";
 
+/* ========= Types ========= */
 export type UserDTO = {
 	id: number;
 	email: string;
@@ -40,6 +42,16 @@ type ListResponse<T> = { status: "success" | "error"; message?: string; data: T[
 type ItemResponse<T> = { status: "success" | "error"; message?: string; data: T };
 type RegistryResponse = { status: "success" | "error"; message?: string; data?: number };
 
+/** API thực tế có meta phân trang (theo Postman: total, page, totalpage, time, link...) */
+export type PagedListResponse<T> = ListResponse<T> & {
+	total?: number;
+	page?: number;
+	totalpage?: number;
+	time?: number;
+	link?: string;
+};
+
+/* ========= Utils ========= */
 export function buildImageUrl(path?: string): string | undefined {
 	if (!path) return undefined;
 	const base = process.env.NEXT_PUBLIC_EPROFILE_API || "https://api-eprofile.pickleballplus.vn";
@@ -60,6 +72,16 @@ export function getLoggedInUserId(): number | null {
 	}
 }
 
+function compact<T extends Record<string, any>>(obj: T): T {
+	const out: any = {};
+	Object.entries(obj).forEach(([k, v]) => {
+		if (v !== undefined && v !== null) out[k] = v;
+	});
+	return out;
+}
+
+/* ========= Users – legacy (giữ nguyên để tương thích) ========= */
+/** LẤY TRANG 1 (cũ) – KHÔNG có meta phân trang trong kiểu trả về */
 export async function listUsers(
 	filters?: Record<string, string | number | boolean | undefined>,
 	orderby?: string
@@ -78,6 +100,60 @@ export async function listUsers(
 	return data.data;
 }
 
+/* ========= Users – phân trang chuẩn ========= */
+/**
+ * Lấy 1 trang người dùng từ API (có meta total/totalpage).
+ * @param page – số trang bắt đầu từ 1
+ * @param filters – bộ lọc tùy ý
+ * @param orderby – ví dụ: "id-asc" | "id-desc"
+ * @param limit – nếu API hỗ trợ (ví dụ limit=10/25/1000)
+ */
+export async function listUsersPage(
+	page = 1,
+	filters?: Record<string, string | number | boolean | undefined>,
+	orderby?: string,
+	limit?: number
+): Promise<PagedListResponse<UserDTO>> {
+	const params = new URLSearchParams();
+	if (filters) {
+		Object.entries(filters).forEach(([k, v]) => {
+			if (v !== undefined && v !== null && v !== "") params.append(k, String(v));
+		});
+	}
+	if (orderby) params.append("orderby", orderby);
+	if (limit !== undefined) params.append("limit", String(limit)); // nếu backend hỗ trợ
+	params.append("page", String(page));
+
+	const qs = params.toString();
+	const url = qs ? `/api/Users?${qs}` : "/api/Users";
+	const { data } = await api.get<PagedListResponse<UserDTO>>(url);
+	if (data.status !== "success") throw new Error(data.message || "List Users failed");
+	return data;
+}
+
+/**
+ * Lấy toàn bộ người dùng bằng cách gọi từng trang rồi gộp lại.
+ * Dùng cho client-side pagination hoặc export dữ liệu.
+ */
+export async function listAllUsers(
+	filters?: Record<string, string | number | boolean | undefined>,
+	orderby?: string
+): Promise<UserDTO[]> {
+	// gọi trang 1 để biết totalpage
+	const first = await listUsersPage(1, filters, orderby);
+	const totalpage = first.totalpage ?? 1;
+
+	// gom dữ liệu
+	const out: UserDTO[] = [...first.data];
+
+	for (let p = 2; p <= totalpage; p += 1) {
+		const res = await listUsersPage(p, filters, orderby);
+		out.push(...res.data);
+	}
+	return out;
+}
+
+/* ========= Users – helpers ========= */
 export async function fetchUserByIdFromList(id: number): Promise<UserDTO | null> {
 	const { data } = await api.get<ListResponse<UserDTO>>("/api/Users?orderby=id-asc");
 	if (data.status !== "success") throw new Error(data.message || "Fetch Users failed");
@@ -90,12 +166,14 @@ export async function getUserById(id: number): Promise<UserDTO | null> {
 	return data.data;
 }
 
+/* ========= Athletes ========= */
 export async function fetchAthleteByUserId(userId: number): Promise<AthleteDTO | null> {
 	const { data } = await api.get<ListResponse<AthleteDTO>>(`/api/Athletes?user_id=${encodeURIComponent(userId)}`);
 	if (data.status !== "success") throw new Error(data.message || "Fetch Athletes failed");
 	return data.data[0] ?? null;
 }
 
+/* ========= Mapping helpers ========= */
 export function mapNationToCountry(nationCode: string): string | undefined {
 	if (nationCode === "VIE") return "Việt Nam";
 	return undefined;
@@ -131,6 +209,7 @@ export function roleLabelFromInt(v: 1 | 2): string {
 	return v === 1 ? "Vận động viên" : "Huấn luyện viên";
 }
 
+/* ========= Mutations ========= */
 export async function registerUser(
 	payload: {
 		email: string;
@@ -185,10 +264,12 @@ export async function updateUserByIdMerged(
 	let current = await getUserById(userId);
 	if (!current) current = await fetchUserByIdFromList(userId);
 	if (!current) throw new Error("Không tìm thấy người dùng");
+
 	const merged: Record<string, any> = { ...current, ...patch };
 	delete merged.id;
 	delete merged.created_at;
 	delete merged.updated_at;
+
 	const body = compact(merged);
 	const { data } = await api.put<{ status: "success" | "error"; message?: string }>(`/api/Users/${userId}`, body);
 	if (data?.status !== "success") throw new Error(data?.message || "Cập nhật thất bại");
@@ -197,12 +278,4 @@ export async function updateUserByIdMerged(
 export async function deleteUser(id: number): Promise<{ ok: boolean; message?: string }> {
 	const { data } = await api.delete<{ status: "success" | "error"; message?: string }>(`/api/Users/${id}`);
 	return { ok: data.status === "success", message: data.message };
-}
-
-function compact<T extends Record<string, any>>(obj: T): T {
-	const out: any = {};
-	Object.entries(obj).forEach(([k, v]) => {
-		if (v !== undefined && v !== null) out[k] = v;
-	});
-	return out;
 }

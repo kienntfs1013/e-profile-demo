@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { listRoles, type RoleDTO } from "@/services/role.service";
-import { buildImageUrl, deleteUser, listUsers, type UserDTO } from "@/services/user.service";
+import { buildImageUrl, deleteUser, listAllUsers, type UserDTO } from "@/services/user.service";
 import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
@@ -133,7 +133,10 @@ export default function UsersManagementPage(): React.JSX.Element {
 		(async () => {
 			try {
 				setLoading(true);
-				const [roleList, users] = await Promise.all([listRoles(undefined, "id-asc"), listUsers(undefined, "id-asc")]);
+				const [roleList, users] = await Promise.all([
+					listRoles(undefined, "id-asc"),
+					listAllUsers(undefined, "id-asc"),
+				]);
 
 				if (!cancelled) {
 					setRoles(roleList);

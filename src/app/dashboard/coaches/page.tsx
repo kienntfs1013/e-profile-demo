@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { buildImageUrl, listUsers, type UserDTO } from "@/services/user.service";
+import { buildImageUrl, listAllUsers, type UserDTO } from "@/services/user.service";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
@@ -106,7 +106,7 @@ export default function CustomersPage(): React.JSX.Element {
 		(async () => {
 			try {
 				setLoading(true);
-				const users = await listUsers(undefined, "id-asc");
+				const users = await listAllUsers(undefined, "id-asc");
 
 				const rows: Row[] = users.filter(isCoach).map((u) => ({
 					id: String(u.id),

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { buildImageUrl, deleteUser, listUsers, type UserDTO } from "@/services/user.service";
+import { buildImageUrl, deleteUser, listAllUsers, type UserDTO } from "@/services/user.service";
 import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
@@ -114,7 +114,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 		(async () => {
 			try {
 				setLoading(true);
-				const users = await listUsers(undefined, "id-asc");
+				const users = await listAllUsers(undefined, "id-asc");
 
 				const rows: Row[] = users.filter(isAthlete).map((u) => ({
 					id: String(u.id),
