@@ -18,18 +18,21 @@ import { useUser } from "@/hooks/use-user";
 import { navItems } from "./config";
 import { navIcons } from "./nav-icons";
 
-type RoleView = "athlete" | "coach" | "other";
+type RoleView = "athlete" | "coach" | "manager" | "admin" | "other";
 
 const roleTypeFrom = (role: unknown): RoleView => {
 	if (role == null) return "other";
-	if (typeof role === "number") return role === 1 ? "athlete" : role === 2 ? "coach" : "other";
-	const s = String(role).toLowerCase();
-	if (s === "1" || /athlete|vận|van/.test(s)) return "athlete";
-	if (s === "2" || /coach|huấn|huan/.test(s)) return "coach";
+	if (typeof role === "number")
+		return role === 1 ? "athlete" : role === 2 ? "coach" : role === 3 ? "manager" : role === 4 ? "admin" : "other";
 	if (typeof role === "object" && "id" in (role as any)) {
 		const id = Number((role as any).id);
-		return id === 1 ? "athlete" : id === 2 ? "coach" : "other";
+		return id === 1 ? "athlete" : id === 2 ? "coach" : id === 3 ? "manager" : id === 4 ? "admin" : "other";
 	}
+	const s = String(role).toLowerCase().trim();
+	if (s === "1" || /athlete|vận|van/.test(s)) return "athlete";
+	if (s === "2" || /coach|huấn|huan/.test(s)) return "coach";
+	if (s === "3" || s.includes("quản lý nhà nước") || s.includes("quan ly nha nuoc")) return "manager";
+	if (s === "4" || s.includes("admin") || s.includes("administrator")) return "admin";
 	return "other";
 };
 
@@ -44,7 +47,18 @@ const filterItemsByRole = (items: NavItemConfig[], role: RoleView | null) => {
 		"achievement",
 		"competitions",
 	]);
-	const hide = role === "athlete" ? hideForAthlete : role === "coach" ? hideForCoach : new Set<string>();
+	const hideForManager = new Set(["health", "training", "achievement", "competitions", "usersManagement"]);
+	const hideForAdmin = new Set(["health", "training", "achievement", "competitions"]);
+	const hide =
+		role === "athlete"
+			? hideForAthlete
+			: role === "coach"
+				? hideForCoach
+				: role === "manager"
+					? hideForManager
+					: role === "admin"
+						? hideForAdmin
+						: new Set<string>();
 	return items.filter((it) => !hide.has(it.key));
 };
 
@@ -161,7 +175,7 @@ export function MobileNav({ open, onClose }: MobileNavProps): React.JSX.Element 
 			<Divider sx={{ borderColor: "var(--mui-palette-neutral-700)" }} />
 
 			<Box component="nav" sx={{ flex: "1 1 auto", p: "12px" }}>
-				{renderNavItems({ pathname, items: itemsToRender, onClose })}
+				{renderMobileNavItems({ pathname, items: itemsToRender, onClose })}
 			</Box>
 
 			<Divider sx={{ borderColor: "var(--mui-palette-neutral-700)" }} />
@@ -169,7 +183,7 @@ export function MobileNav({ open, onClose }: MobileNavProps): React.JSX.Element 
 	);
 }
 
-function renderNavItems({
+function renderMobileNavItems({
 	items = [],
 	pathname,
 	onClose,
@@ -180,7 +194,7 @@ function renderNavItems({
 }): React.JSX.Element {
 	const children = items.reduce((acc: React.ReactNode[], curr: NavItemConfig): React.ReactNode[] => {
 		const { key, ...item } = curr;
-		acc.push(<NavItem key={key} pathname={pathname} onClose={onClose} {...item} />);
+		acc.push(<MobileNavItem key={key} pathname={pathname} onClose={onClose} {...item} />);
 		return acc;
 	}, []);
 	return (
@@ -190,12 +204,12 @@ function renderNavItems({
 	);
 }
 
-interface NavItemProps extends Omit<NavItemConfig, "items"> {
+interface MobileNavItemProps extends Omit<NavItemConfig, "items"> {
 	pathname: string;
 	onClose?: () => void;
 }
 
-function NavItem({
+function MobileNavItem({
 	disabled,
 	external,
 	href,
@@ -204,7 +218,7 @@ function NavItem({
 	pathname,
 	title,
 	onClose,
-}: NavItemProps): React.JSX.Element {
+}: MobileNavItemProps): React.JSX.Element {
 	const active = isNavItemActive({ disabled, external, href, matcher, pathname });
 	const Icon = icon ? navIcons[icon] : null;
 
