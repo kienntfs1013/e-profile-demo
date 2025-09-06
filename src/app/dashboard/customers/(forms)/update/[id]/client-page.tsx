@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import {
 	buildImageUrl,
 	fetchAthleteByUserId,
-	fetchUserByIdFromList,
 	getLoggedInUserId,
+	getUserById,
 	mapGenderToVN,
 	mapNationToCountry,
 	mapSportToVN,
@@ -32,13 +32,6 @@ import OutlinedInput from "@mui/material/OutlinedInput";
 import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import { ArrowDownRight } from "@phosphor-icons/react/dist/ssr/ArrowDownRight";
-import { ArrowUpRight } from "@phosphor-icons/react/dist/ssr/ArrowUpRight";
-import { Barbell } from "@phosphor-icons/react/dist/ssr/Barbell";
-import { HeartbeatIcon } from "@phosphor-icons/react/dist/ssr/Heartbeat";
-import { ListBullets } from "@phosphor-icons/react/dist/ssr/ListBullets";
-import { MedalIcon } from "@phosphor-icons/react/dist/ssr/Medal";
 
 type Props = { id: string };
 
@@ -49,66 +42,6 @@ const sports = [
 	{ value: "taekwondo", label: "Taekwondo" },
 	{ value: "boxing", label: "Boxing" },
 ] as const;
-
-function SummaryCard(props: {
-	title: string;
-	value: string;
-	icon: React.ReactNode;
-	chip?: React.ReactNode;
-	progress?: number;
-	upDown?: "up" | "down";
-	deltaText?: string;
-	avatarBg: string;
-	avatarFg?: string;
-}) {
-	const { title, value, icon, chip, progress, upDown, deltaText, avatarBg, avatarFg = "#fff" } = props;
-	return (
-		<Card sx={{ flex: 1, minWidth: 260, borderRadius: 3 }}>
-			<CardContent>
-				<Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-					<Typography variant="overline" color="text.secondary" letterSpacing={1}>
-						{title}
-					</Typography>
-					<Avatar
-						sx={{
-							width: 56,
-							height: 56,
-							bgcolor: "transparent",
-							background: avatarBg,
-							color: avatarFg,
-							boxShadow: "0 6px 16px rgba(0,0,0,.15)",
-						}}
-					>
-						{icon}
-					</Avatar>
-				</Stack>
-				<Typography variant="h4" fontWeight={800} sx={{ mb: progress != null ? 1 : 0.5 }}>
-					{value}
-				</Typography>
-				{progress != null ? (
-					<LinearProgress variant="determinate" value={progress} sx={{ height: 6, borderRadius: 3, mb: 1 }} />
-				) : null}
-				<Stack direction="row" spacing={1} alignItems="center">
-					{upDown === "up" ? (
-						<ArrowUpRight size={18} color="#22c55e" />
-					) : upDown === "down" ? (
-						<ArrowDownRight size={18} color="#ef4444" />
-					) : null}
-					{deltaText ? (
-						<Typography variant="body2" sx={{ color: upDown === "down" ? "#ef4444" : "#22c55e" }}>
-							{deltaText}
-						</Typography>
-					) : null}
-					{chip ? (
-						<Typography variant="body2" color="text.secondary">
-							{chip}
-						</Typography>
-					) : null}
-				</Stack>
-			</CardContent>
-		</Card>
-	);
-}
 
 type FormState = {
 	avatar?: string;
@@ -129,6 +62,7 @@ type FormState = {
 	passport_expiry_date?: string;
 };
 
+/* ---------- helpers nhỏ, tối giản ---------- */
 function vnToNationCode(country?: string): string {
 	const s = (country || "").toLowerCase();
 	return s.includes("việt") || s.includes("viet") ? "VIE" : "";
@@ -175,29 +109,48 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 	const [avatarUrl, setAvatarUrl] = React.useState<string | undefined>(undefined);
 	const fileRef = React.useRef<HTMLInputElement>(null);
 	const onPickFile = () => fileRef.current?.click();
+
+	// Giữ URL preview để revoke khi thay/thoát (tránh memory leak)
+	const previewRef = React.useRef<string | null>(null);
 	const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const f = e.target.files?.[0];
-		if (f) setAvatarUrl(URL.createObjectURL(f));
+		if (!f) return;
+		if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+		const url = URL.createObjectURL(f);
+		previewRef.current = url;
+		setAvatarUrl(url);
 	};
+	React.useEffect(() => {
+		return () => {
+			if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+		};
+	}, []);
+
 	const change = <K extends keyof FormState>(key: K, val: FormState[K]) => setForm((p) => ({ ...p, [key]: val }));
 
+	/* ---------- LOAD USER + ATHLETE (ưu tiên getUserById, có hủy request) ---------- */
 	React.useEffect(() => {
-		let cancelled = false;
-		async function load() {
+		const controller = new AbortController();
+		let mounted = true;
+
+		(async () => {
 			try {
 				setLoading(true);
 				setFetchError(null);
 
-				const uid = id || getLoggedInUserId();
+				const uid = Number(id || getLoggedInUserId());
 				if (!uid) {
 					setFetchError("Không xác định được ID người dùng");
 					return;
 				}
 
 				const [user, athlete] = await Promise.all([
-					fetchUserByIdFromList(Number(uid)),
-					fetchAthleteByUserId(Number(uid)).catch(() => null),
+					// nếu bạn đã thêm cache ở service, có thể truyền { signal: controller.signal }
+					getUserById(uid),
+					fetchAthleteByUserId(uid).catch(() => null),
 				]);
+
+				if (!mounted) return;
 				if (!user) {
 					setFetchError("Không tìm thấy người dùng");
 					return;
@@ -211,7 +164,7 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 				const birthdayRaw = take<string>(user.birthday, athlete?.date_of_birth) || "";
 				const birthday = birthdayRaw ? birthdayRaw.slice(0, 10) : "";
 				const nation = vnToNationCode(take<string>(user.country, athlete?.nationality));
-				const gender = normalizeGender(take<string>(user.gender, athlete?.gender));
+				const gender = normalizeGender(String(take(user.gender, athlete?.gender) ?? ""));
 
 				const s = (user.sport || "").trim().toLowerCase();
 				const sportValue =
@@ -227,7 +180,7 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 
 				const avatar =
 					buildImageUrl(user.profile_picture_path) ||
-					buildImageUrl(athlete?.athlete_profile_picture_path) ||
+					buildImageUrl((athlete as AthleteDTO | null)?.athlete_profile_picture_path) ||
 					"/assets/noimagefound.png";
 
 				const roleInt = parseRoleToInt(user.role);
@@ -248,43 +201,44 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 					city: user.city,
 					national_id_card_no: user.national_id_card_no,
 					passport_no: user.passport_no,
-					passport_expiry_date: user.passport_expiry_date,
+					passport_expiry_date: user.passport_expiry_date ? String(user.passport_expiry_date).slice(0, 10) : "",
 				};
 
-				if (!cancelled) {
-					setForm(nextForm);
-					setAvatarUrl(nextForm.avatar);
-				}
+				setForm(nextForm);
+				setAvatarUrl(nextForm.avatar);
 			} catch (e: any) {
-				if (!cancelled) setFetchError(e?.response?.data?.message || e?.message || "Không tải được dữ liệu");
+				if (e?.name === "AbortError") return;
+				setFetchError(e?.response?.data?.message || e?.message || "Không tải được dữ liệu");
 			} finally {
-				if (!cancelled) setLoading(false);
+				if (mounted) setLoading(false);
 			}
-		}
-		load();
+		})();
+
 		return () => {
-			cancelled = true;
+			mounted = false;
+			controller.abort();
 		};
 	}, [id]);
 
+	/* ---------- SAVE ---------- */
 	const handleSave = async () => {
 		try {
 			setSaving(true);
 			setToast(null);
 
-			const uid = id || getLoggedInUserId();
+			const uid = Number(id || getLoggedInUserId());
 			if (!uid) {
 				setToast({ type: "error", message: "Không xác định được ID người dùng" });
 				return;
 			}
 
-			const current = await fetchUserByIdFromList(Number(uid));
+			const current = await getUserById(uid);
 			if (!current) {
 				setToast({ type: "error", message: "Không tìm thấy người dùng" });
 				return;
 			}
 
-			await updateUserByIdMerged(Number(uid), {
+			await updateUserByIdMerged(uid, {
 				firstName: form.firstName,
 				lastName: form.lastName,
 				email: form.email,
@@ -294,7 +248,7 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 				sport: mapSportToVN(form.sport) ?? current.sport,
 				country: mapNationToCountry(form.nation) ?? current.country ?? "Việt Nam",
 				role: form.role !== "" ? Number(form.role) : parseRoleToInt(current.role),
-				profile_picture_path: current.profile_picture_path,
+				profile_picture_path: current.profile_picture_path, // phần upload chưa đẩy server, nên giữ như cũ
 				address: form.address || current.address,
 				district: form.district || current.district,
 				city: form.city || current.city,
@@ -304,14 +258,8 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 				is_active: current.is_active ?? 1,
 			});
 
-			setToast({ type: "success", message: "Đã lưu thay đổi. Đang quay lại…" });
-			window.setTimeout(() => {
-				if (typeof window !== "undefined" && window.history.length > 1) {
-					router.back();
-				} else {
-					router.push("/");
-				}
-			}, 1200);
+			setToast({ type: "success", message: "Đã lưu thay đổi" });
+			router.refresh();
 		} catch (e: any) {
 			const msg = e?.response?.data?.message || e?.message || "Lỗi kết nối Cơ Sở Dữ Liệu";
 			setToast({ type: "error", message: msg });
@@ -339,7 +287,17 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 										Tải ảnh lên
 									</Button>
 									{avatarUrl ? (
-										<Button variant="text" color="error" onClick={() => setAvatarUrl(undefined)}>
+										<Button
+											variant="text"
+											color="error"
+											onClick={() => {
+												if (previewRef.current) {
+													URL.revokeObjectURL(previewRef.current);
+													previewRef.current = null;
+												}
+												setAvatarUrl(undefined);
+											}}
+										>
 											Xóa ảnh
 										</Button>
 									) : null}
@@ -470,7 +428,6 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 										</Select>
 									</FormControl>
 								</Box>
-
 								<Box className="field">
 									<FormControl fullWidth required>
 										<InputLabel>Vai trò</InputLabel>
@@ -488,7 +445,6 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 										</Select>
 									</FormControl>
 								</Box>
-
 								<Box className="field">
 									<FormControl fullWidth>
 										<InputLabel>Địa chỉ</InputLabel>
@@ -563,7 +519,7 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 
 				<Divider />
 				<CardActions sx={{ justifyContent: "flex-end" }}>
-					<Button variant="contained" type="button" disabled={saving} onClick={handleSave}>
+					<Button variant="contained" type="button" disabled={saving || loading} onClick={handleSave}>
 						{saving ? "Đang lưu..." : "Lưu thay đổi"}
 					</Button>
 				</CardActions>

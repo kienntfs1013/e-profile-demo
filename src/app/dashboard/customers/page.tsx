@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { buildImageUrl, listAllUsers, type UserDTO } from "@/services/user.service";
+import { buildImageUrl, listUsersPage, type UserDTO } from "@/services/user.service";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
@@ -21,15 +21,13 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { Eye } from "@phosphor-icons/react/dist/ssr/Eye";
 
-function applyPagination<T>(rows: T[], page: number, rowsPerPage: number): T[] {
-	return rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
-}
+const VISIBLE_COLS = 6; // Vận động viên | Bộ môn | Quốc gia | Giới tính | Tuổi | Thao tác
+const DEFAULT_ORDER = "id-asc";
 
 function isAthlete(u: UserDTO): boolean {
 	const r = (u.role as any)?.toString?.().toLowerCase?.() ?? "";
 	return r === "athlete" || r === "vận động viên" || r === "van dong vien" || r === "1";
 }
-
 function fullName(u: UserDTO): string {
 	const ln = u.lastName?.trim() ?? "";
 	const fn = u.firstName?.trim() ?? "";
@@ -37,7 +35,6 @@ function fullName(u: UserDTO): string {
 	if (byName) return byName;
 	return u.email ? u.email.split("@")[0] : "Người dùng";
 }
-
 function calcAge(birthday?: string): number | undefined {
 	if (!birthday) return undefined;
 	const d = new Date(birthday);
@@ -48,7 +45,6 @@ function calcAge(birthday?: string): number | undefined {
 	if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
 	return age;
 }
-
 type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
 function normalizeSport(input?: string): SportCode {
 	const s = (input || "").toLowerCase().trim();
@@ -66,7 +62,6 @@ function labelSport(s: SportCode): string {
 	if (s === "boxing") return "Boxing";
 	return "-";
 }
-
 function normalizeGender(input?: string | number | null): "Nam" | "Nữ" | "Khác" | "-" {
 	if (input === undefined || input === null) return "-";
 	const v = String(input).toLowerCase().trim();
@@ -90,73 +85,89 @@ type Row = {
 export default function CustomersPage(): React.JSX.Element {
 	const router = useRouter();
 
-	const [data, setData] = React.useState<Row[]>([]);
+	const [rows, setRows] = React.useState<Row[]>([]);
 	const [loading, setLoading] = React.useState(true);
 
 	const [search, setSearch] = React.useState("");
 	const [sport, setSport] = React.useState<"all" | SportCode>("all");
 	const [sortName, setSortName] = React.useState<"asc" | "desc">("asc");
 
-	const [page, setPage] = React.useState(0);
-	const [rowsPerPage, setRowsPerPage] = React.useState(5);
+	// server pagination
+	const [page, setPage] = React.useState(0); // UI 0-based; API 1-based
+	const [rowsPerPage, setRowsPerPage] = React.useState(10);
+	const [total, setTotal] = React.useState(0);
 
-	React.useEffect(() => {
-		let cancelled = false;
+	// debounce tìm kiếm
+	const searchDeferred = React.useDeferredValue(search);
 
-		(async () => {
+	// chống race conditions giữa nhiều lần gọi
+	const reqIdRef = React.useRef(0);
+
+	const mapToRow = (u: UserDTO): Row => ({
+		id: String(u.id),
+		name: fullName(u),
+		email: u.email,
+		phone: u.phoneNumber,
+		avatar: buildImageUrl(u.profile_picture_path),
+		age: calcAge(u.birthday),
+		sport: normalizeSport(u.sport),
+		country: u.country || undefined,
+		gender: normalizeGender((u as any).gender),
+	});
+
+	const fetchPage = React.useCallback(
+		async (uiPage: number, pageSize: number) => {
+			const myReq = ++reqIdRef.current;
 			try {
 				setLoading(true);
-				const users = await listAllUsers(undefined, "id-asc");
 
-				const rows: Row[] = users.filter(isAthlete).map((u) => ({
-					id: String(u.id),
-					name: fullName(u),
-					email: u.email,
-					phone: u.phoneNumber,
-					avatar: buildImageUrl(u.profile_picture_path),
-					age: calcAge(u.birthday),
-					sport: normalizeSport(u.sport),
-					country: u.country || undefined,
-					gender: normalizeGender((u as any).gender),
-				}));
+				// Lọc trên API: chỉ lấy VĐV (role=1). Có thể thêm các filter khác nếu backend hỗ trợ.
+				const res = await listUsersPage(uiPage + 1, { role: 1 }, DEFAULT_ORDER, pageSize);
 
-				if (!cancelled) setData(rows);
+				if (reqIdRef.current !== myReq) return;
+
+				// Phòng khi backend trả cả role khác (data không sạch)
+				const onlyAthletes = res.data.filter(isAthlete);
+
+				// Lọc trong trang: sport và text query
+				const pageFiltered = onlyAthletes.filter((u) => {
+					const okSport = sport === "all" ? true : normalizeSport(u.sport) === sport;
+					const q = searchDeferred.trim().toLowerCase();
+					const okQ = q
+						? [fullName(u), u.email, u.phoneNumber].filter(Boolean).join(" ").toLowerCase().includes(q)
+						: true;
+					return okSport && okQ;
+				});
+
+				// Sắp xếp theo tên trong trang hiện tại
+				pageFiltered.sort((a, b) =>
+					sortName === "asc"
+						? fullName(a).localeCompare(fullName(b), "vi", { sensitivity: "base" })
+						: fullName(b).localeCompare(fullName(a), "vi", { sensitivity: "base" })
+				);
+
+				setRows(pageFiltered.map(mapToRow));
+				setTotal(res.total ?? res.data.length);
 			} catch {
-				if (!cancelled) setData([]);
+				setRows([]);
+				setTotal(0);
 			} finally {
-				if (!cancelled) setLoading(false);
+				if (reqIdRef.current === myReq) setLoading(false);
 			}
-		})();
+		},
+		[searchDeferred, sport, sortName]
+	);
 
-		return () => {
-			cancelled = true;
-		};
-	}, []);
+	React.useEffect(() => {
+		fetchPage(page, rowsPerPage);
+	}, [fetchPage, page, rowsPerPage]);
 
-	const filtered = React.useMemo(() => {
-		const q = search.trim().toLowerCase();
-		return data.filter((u) => {
-			const okName = q ? u.name.toLowerCase().includes(q) : true;
-			const okSport = sport === "all" ? true : u.sport === sport;
-			return okName && okSport;
-		});
-	}, [data, search, sport]);
-
-	const sorted = React.useMemo(() => {
-		const arr = [...filtered];
-		arr.sort((a, b) =>
-			sortName === "asc"
-				? a.name.localeCompare(b.name, "vi", { sensitivity: "base" })
-				: b.name.localeCompare(a.name, "vi", { sensitivity: "base" })
-		);
-		return arr;
-	}, [filtered, sortName]);
-
-	const rows = React.useMemo(() => applyPagination(sorted, page, rowsPerPage), [sorted, page, rowsPerPage]);
+	// đổi filter -> về trang 0
+	React.useEffect(() => {
+		setPage(0);
+	}, [searchDeferred, sport, sortName]);
 
 	const goDetail = (id: string) => router.push(`/dashboard/customers/${id}`);
-
-	const visibleColCount = 6;
 
 	return (
 		<Stack spacing={3}>
@@ -173,10 +184,7 @@ export default function CustomersPage(): React.JSX.Element {
 							size="small"
 							label="Tìm kiếm theo tên"
 							value={search}
-							onChange={(e) => {
-								setSearch(e.target.value);
-								setPage(0);
-							}}
+							onChange={(e) => setSearch(e.target.value)}
 						/>
 					</Box>
 
@@ -187,10 +195,7 @@ export default function CustomersPage(): React.JSX.Element {
 							size="small"
 							label="Bộ môn"
 							value={sport}
-							onChange={(e) => {
-								setSport(e.target.value as "all" | SportCode);
-								setPage(0);
-							}}
+							onChange={(e) => setSport(e.target.value as "all" | SportCode)}
 						>
 							<MenuItem value="all">Tất cả</MenuItem>
 							<MenuItem value="shooting">Bắn súng</MenuItem>
@@ -207,10 +212,7 @@ export default function CustomersPage(): React.JSX.Element {
 							size="small"
 							label="Sắp xếp theo tên"
 							value={sortName}
-							onChange={(e) => {
-								setSortName(e.target.value as "asc" | "desc");
-								setPage(0);
-							}}
+							onChange={(e) => setSortName(e.target.value as "asc" | "desc")}
 						>
 							<MenuItem value="asc">A → Z</MenuItem>
 							<MenuItem value="desc">Z → A</MenuItem>
@@ -236,13 +238,13 @@ export default function CustomersPage(): React.JSX.Element {
 						<TableBody>
 							{loading ? (
 								<TableRow>
-									<TableCell colSpan={visibleColCount}>
+									<TableCell colSpan={VISIBLE_COLS}>
 										<Box p={3} textAlign="center" color="text.secondary">
 											Đang tải dữ liệu…
 										</Box>
 									</TableCell>
 								</TableRow>
-							) : (
+							) : rows.length > 0 ? (
 								rows.map((row) => (
 									<TableRow key={row.id} hover onClick={() => goDetail(row.id)} sx={{ cursor: "pointer" }}>
 										<TableCell>
@@ -275,11 +277,9 @@ export default function CustomersPage(): React.JSX.Element {
 										</TableCell>
 									</TableRow>
 								))
-							)}
-
-							{!loading && rows.length === 0 && (
+							) : (
 								<TableRow>
-									<TableCell colSpan={visibleColCount}>
+									<TableCell colSpan={VISIBLE_COLS}>
 										<Box p={3} textAlign="center" color="text.secondary">
 											Không có dữ liệu
 										</Box>
@@ -292,7 +292,7 @@ export default function CustomersPage(): React.JSX.Element {
 
 				<TablePagination
 					component="div"
-					count={filtered.length}
+					count={total}
 					page={page}
 					rowsPerPage={rowsPerPage}
 					onPageChange={(_, newPage) => setPage(newPage)}
@@ -300,7 +300,7 @@ export default function CustomersPage(): React.JSX.Element {
 						setRowsPerPage(parseInt(e.target.value, 10));
 						setPage(0);
 					}}
-					rowsPerPageOptions={[5, 10, 25]}
+					rowsPerPageOptions={[5, 10, 25, 50]}
 					labelRowsPerPage="Dòng / trang"
 				/>
 			</Paper>

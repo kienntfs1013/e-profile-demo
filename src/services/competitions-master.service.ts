@@ -16,6 +16,17 @@ type ListResponse<T> = { status?: "success" | "error"; message?: string; data?: 
 type OneResponse<T> = { status?: "success" | "error"; message?: string; data?: T };
 type MutateResponse<T = unknown> = { status?: "success" | "error"; message?: string; data?: T };
 
+export type PagedListResponse<T> = {
+	status?: "success" | "error";
+	message?: string;
+	data: T[];
+	total?: number;
+	page?: number;
+	totalpage?: number;
+	time?: number;
+	link?: string;
+};
+
 function toQuery(filters?: Record<string, string | number | boolean | undefined>, orderby?: string) {
 	const params = new URLSearchParams();
 	if (filters) {
@@ -36,6 +47,29 @@ export function mapSportKeyToApi(v: "shooting" | "archery" | "boxing" | "taekwon
 
 const BASE_URL = "/api/Competitions";
 
+export async function listCompetitionsPage(
+	page = 1,
+	limit = 10,
+	filters?: Record<string, string | number | boolean | undefined>,
+	orderby?: string,
+	signal?: AbortSignal
+): Promise<PagedListResponse<CompetitionMasterDTO>> {
+	const params = new URLSearchParams();
+	params.set("page", String(page));
+	if (limit) params.set("limit", String(limit));
+	if (orderby) params.set("orderby", orderby);
+	if (filters) {
+		Object.entries(filters).forEach(([k, v]) => {
+			if (v !== undefined && v !== null && v !== "") params.append(k, String(v));
+		});
+	}
+	const url = `${BASE_URL}?${params.toString()}`;
+	const { data } = await api.get<PagedListResponse<CompetitionMasterDTO>>(url, { signal });
+	if ((data?.status && data.status !== "success") || !Array.isArray(data?.data))
+		throw new Error(data?.message || "List Competitions failed");
+	return { ...data, data: data.data };
+}
+
 export async function listCompetitions(
 	filters?: Record<string, string | number | boolean | undefined>,
 	orderby?: string
@@ -43,7 +77,6 @@ export async function listCompetitions(
 	const qs = toQuery(filters, orderby);
 	const url = qs ? `${BASE_URL}?${qs}` : BASE_URL;
 	const { data } = await api.get<ListResponse<CompetitionMasterDTO>>(url);
-
 	if (data?.status && data.status !== "success") throw new Error(data.message || "List Competitions failed");
 	const arr = (data?.data ?? (Array.isArray(data) ? data : undefined)) as CompetitionMasterDTO[] | undefined;
 	if (!arr) throw new Error("List Competitions failed: unexpected response");
@@ -57,7 +90,6 @@ export async function listCompetitionsBySport(sport: "shooting" | "archery" | "b
 export async function getCompetitionById(id: number) {
 	const res = await api.get<OneResponse<CompetitionMasterDTO> | CompetitionMasterDTO | any>(`${BASE_URL}/${id}`);
 	const payload = res.data;
-
 	if (typeof payload?.status === "string") {
 		if (payload.status !== "success") throw new Error(payload.message || "Get Competition failed");
 		return (payload as any).data ?? null;

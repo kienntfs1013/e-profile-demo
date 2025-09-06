@@ -6,15 +6,14 @@ import { uploadFile } from "@/services/upload.service";
 import {
 	buildImageUrl,
 	fetchAthleteByUserId,
-	fetchUserByIdFromList,
 	getLoggedInUserId,
-	listUsers,
+	getUserById,
+	listUsersPage,
 	mapGenderToVN,
 	mapNationToCountry,
 	mapSportToVN,
 	parseRoleToInt,
 	roleLabelFromInt,
-	updateUserByIdMerged,
 	type AthleteDTO,
 } from "@/services/user.service";
 import Alert from "@mui/material/Alert";
@@ -122,11 +121,17 @@ export default function Page(): React.JSX.Element {
 	const fileRef = React.useRef<HTMLInputElement>(null);
 	const onPickFile = () => fileRef.current?.click();
 
+	const previewRef = React.useRef<string | null>(null);
+
 	const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const f = e.target.files?.[0];
 		if (!f) return;
+		if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+
 		const previewUrl = URL.createObjectURL(f);
+		previewRef.current = previewUrl;
 		setAvatarUrl(previewUrl);
+
 		try {
 			setUploadingAvatar(true);
 			const res = await uploadFile(f);
@@ -141,6 +146,12 @@ export default function Page(): React.JSX.Element {
 		}
 	};
 
+	React.useEffect(() => {
+		return () => {
+			if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+		};
+	}, []);
+
 	const change = <K extends keyof FormState>(key: K, val: FormState[K]) => setForm((p) => ({ ...p, [key]: val }));
 
 	const resolveUserId = React.useCallback(() => {
@@ -149,15 +160,10 @@ export default function Page(): React.JSX.Element {
 		return getLoggedInUserId();
 	}, [searchParams]);
 
-	const loadUser = React.useCallback(async (uid: number) => {
-		const viaList = await listUsers({ id: uid });
-		if (viaList && viaList.length) return viaList[0];
-		return await fetchUserByIdFromList(uid);
-	}, []);
-
 	React.useEffect(() => {
-		let cancelled = false;
-		async function load() {
+		let mounted = true;
+
+		(async () => {
 			try {
 				setLoading(true);
 				setFetchError(null);
@@ -168,9 +174,11 @@ export default function Page(): React.JSX.Element {
 					return;
 				}
 
-				const [user, athlete] = await Promise.all([loadUser(uid), fetchAthleteByUserId(uid).catch(() => null)]);
+				const [user, athlete] = await Promise.all([getUserById(uid), fetchAthleteByUserId(uid).catch(() => null)]);
+
+				if (!mounted) return;
 				if (!user) {
-					setFetchError(`Không tìm thấy người dùng`);
+					setFetchError("Không tìm thấy người dùng");
 					return;
 				}
 
@@ -182,7 +190,7 @@ export default function Page(): React.JSX.Element {
 				const birthdayRaw = take<string>(user.birthday, athlete?.date_of_birth) || "";
 				const birthday = birthdayRaw ? birthdayRaw.slice(0, 10) : "";
 				const nation = vnToNationCode(take<string>(user.country, athlete?.nationality));
-				const gender = normalizeGender(take<string>(user.gender, athlete?.gender));
+				const gender = normalizeGender(String(take(user.gender, athlete?.gender) ?? ""));
 				const sport = (user.sport || "").trim().toLowerCase();
 				const sportValue =
 					sport === "boxing"
@@ -221,22 +229,20 @@ export default function Page(): React.JSX.Element {
 					passport_expiry_date: user.passport_expiry_date ? String(user.passport_expiry_date).slice(0, 10) : "",
 				};
 
-				if (!cancelled) {
-					setForm(nextForm);
-					setAvatarUrl(nextForm.avatar);
-					setUploadedAvatarPath(undefined);
-				}
+				setForm(nextForm);
+				setAvatarUrl(nextForm.avatar);
+				setUploadedAvatarPath(undefined);
 			} catch (e: any) {
-				if (!cancelled) setFetchError(e?.message || "Không tải được dữ liệu");
+				setFetchError(e?.response?.data?.message || e?.message || "Không tải được dữ liệu");
 			} finally {
-				if (!cancelled) setLoading(false);
+				if (mounted) setLoading(false);
 			}
-		}
-		load();
+		})();
+
 		return () => {
-			cancelled = true;
+			mounted = false;
 		};
-	}, [loadUser, resolveUserId]);
+	}, [resolveUserId]);
 
 	const checkEmailExists = React.useCallback(async (email: string, excludeId?: number) => {
 		const v = String(email || "").trim();
@@ -246,10 +252,15 @@ export default function Page(): React.JSX.Element {
 		}
 		try {
 			setEmailChecking(true);
-			const rows = await listUsers({ email: v });
-			const found = rows.some((u) => (u.email || "").toLowerCase() === v.toLowerCase() && u.id !== excludeId);
+			const res = await listUsersPage(1, { email: v }, undefined, 5);
+			const found = (res.data || []).some(
+				(u) => (u.email || "").toLowerCase() === v.toLowerCase() && u.id !== (excludeId ?? -1)
+			);
 			setEmailExists(found);
 			return found;
+		} catch {
+			setEmailExists(false);
+			return false;
 		} finally {
 			setEmailChecking(false);
 		}
@@ -263,10 +274,13 @@ export default function Page(): React.JSX.Element {
 		}
 		try {
 			setPhoneChecking(true);
-			const rows = await listUsers({ phoneNumber: v });
-			const found = rows.some((u) => (u.phoneNumber || "") === v && u.id !== excludeId);
+			const res = await listUsersPage(1, { phoneNumber: v }, undefined, 5);
+			const found = (res.data || []).some((u) => (u.phoneNumber || "") === v && u.id !== (excludeId ?? -1));
 			setPhoneExists(found);
 			return found;
+		} catch {
+			setPhoneExists(false);
+			return false;
 		} finally {
 			setPhoneChecking(false);
 		}
@@ -280,12 +294,6 @@ export default function Page(): React.JSX.Element {
 			const userId = resolveUserId();
 			if (!userId) {
 				setToast({ type: "error", message: "Không xác định được ID người dùng" });
-				return;
-			}
-
-			const current = await loadUser(userId);
-			if (!current) {
-				setToast({ type: "error", message: "Không tìm thấy người dùng" });
 				return;
 			}
 
@@ -305,7 +313,13 @@ export default function Page(): React.JSX.Element {
 				}
 			}
 
-			await updateUserByIdMerged(userId, {
+			const current = await getUserById(userId);
+			if (!current) {
+				setToast({ type: "error", message: "Không tìm thấy người dùng" });
+				return;
+			}
+
+			const payload = {
 				firstName: form.firstName,
 				lastName: form.lastName,
 				email: form.email,
@@ -323,18 +337,13 @@ export default function Page(): React.JSX.Element {
 				passport_no: form.passport_no || current.passport_no,
 				passport_expiry_date: form.passport_expiry_date || current.passport_expiry_date,
 				is_active: current.is_active ?? 1,
-			});
+			};
+
+			await (await import("@/services/user.service")).updateUserByIdMerged(userId, payload as any);
 
 			setFetchError(null);
 			setToast({ type: "success", message: "Đã lưu thay đổi" });
-
-			setTimeout(() => {
-				if (typeof window !== "undefined") {
-					window.location.reload();
-				} else {
-					router.refresh();
-				}
-			}, 600);
+			router.refresh();
 		} catch (e: any) {
 			const msg = e?.response?.data?.message || e?.message || "Lỗi kết nối Cơ Sở Dữ Liệu";
 			setToast({ type: "error", message: msg });
@@ -366,6 +375,10 @@ export default function Page(): React.JSX.Element {
 											variant="text"
 											color="error"
 											onClick={() => {
+												if (previewRef.current) {
+													URL.revokeObjectURL(previewRef.current);
+													previewRef.current = null;
+												}
 												setAvatarUrl(undefined);
 												setUploadedAvatarPath(undefined);
 											}}
@@ -601,7 +614,12 @@ export default function Page(): React.JSX.Element {
 				</CardContent>
 				<Divider />
 				<CardActions sx={{ justifyContent: "flex-end" }}>
-					<Button variant="contained" type="button" disabled={saving || uploadingAvatar} onClick={handleSave}>
+					<Button
+						variant="contained"
+						type="button"
+						disabled={saving || uploadingAvatar || emailExists || phoneExists}
+						onClick={handleSave}
+					>
 						{saving ? "Đang lưu..." : "Lưu thay đổi"}
 					</Button>
 				</CardActions>

@@ -12,7 +12,7 @@ import {
 	type ShootingCompetitionDTO,
 	type TaekwondoCompetitionDTO,
 } from "@/services/competition.service";
-import { fetchUserByIdFromList, getLoggedInUserId } from "@/services/user.service";
+import { getLoggedInUserId, getUserById } from "@/services/user.service";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -75,11 +75,18 @@ function parseResult(v?: string) {
 	return v;
 }
 
+// === helpers cho lọc/sắp xếp ===
+function getWhen(r: any): string {
+	// Ưu tiên recorded_at rồi đến created_at (đều dạng ISO string)
+	return (r?.recorded_at as string) || (r?.created_at as string) || "";
+}
+
 export default function Page() {
 	const router = useRouter();
 
 	const [sort, setSort] = React.useState<"newest" | "oldest">("newest");
 	const [search, setSearch] = React.useState<string>("");
+	const searchDeferred = React.useDeferredValue(search);
 	const [date, setDate] = React.useState<string>("");
 
 	const [arch, setArch] = React.useState<ArcheryCompetitionDTO[]>([]);
@@ -94,15 +101,18 @@ export default function Page() {
 	const [athleteId, setAthleteId] = React.useState<number | undefined>(undefined);
 	const [sportKey, setSportKey] = React.useState<SportKey | "">("");
 
+	// 1) Lấy user nhanh gọn bằng getUserById (tránh fetch toàn bộ list)
 	React.useEffect(() => {
 		let cancelled = false;
-		async function loadUser() {
+		(async () => {
 			const uid = getLoggedInUserId();
 			if (!uid) return;
-			const user = await fetchUserByIdFromList(uid);
-			if (cancelled || !user) return;
 
-			setAthleteId(Number(user.id));
+			const user = await getUserById(uid).catch(() => null);
+			if (!user || cancelled) return;
+
+			setAthleteId(user.id);
+
 			const s = String(user.sport || "")
 				.toLowerCase()
 				.trim();
@@ -111,17 +121,17 @@ export default function Page() {
 			else if (s === "taekwondo") setSportKey("taekwondo");
 			else if (s === "boxing") setSportKey("boxing");
 			else setSportKey("");
-		}
-		loadUser();
+		})();
 		return () => {
 			cancelled = true;
 		};
 	}, []);
 
+	// 2) Chỉ fetch dữ liệu cho môn đang xem
 	React.useEffect(() => {
 		let cancelled = false;
 		async function load() {
-			if (!athleteId) return;
+			if (!athleteId || !sportKey) return;
 			setLoading(true);
 			try {
 				if (sportKey === "archery") {
@@ -147,29 +157,69 @@ export default function Page() {
 		};
 	}, [athleteId, sportKey]);
 
+	// reset trang khi thay đổi filter
 	React.useEffect(() => {
 		setPage(0);
-	}, [sportKey, search, sort, date]);
+	}, [sportKey, searchDeferred, sort, date]);
 
-	const matchDate = (iso?: string) => {
-		if (!date) return true;
-		if (!iso) return false;
-		return dayjs(iso).format("YYYY-MM-DD") === date;
-	};
+	// Chỉ xử lý lọc/sắp xếp cho dataset của môn hiện tại (giảm compute)
+	const activeData = React.useMemo<Row[]>(() => {
+		if (sportKey === "archery") return arch;
+		if (sportKey === "shooting") return shoot;
+		if (sportKey === "boxing") return box;
+		if (sportKey === "taekwondo") return tkd;
+		return [];
+	}, [sportKey, arch, shoot, box, tkd]);
 
-	const applySortFilter = <T extends { created_at?: string; recorded_at?: string }>(arr: T[]) => {
-		const filtered = arr.filter((r) => matchDate(r.recorded_at || r.created_at));
-		const sorted = [...filtered].sort((a, b) => {
-			const da = a.created_at || a.recorded_at || "";
-			const db = b.created_at || b.recorded_at || "";
+	const dateObj = React.useMemo(() => (date ? dayjs(date) : null), [date]);
+
+	const filteredSorted = React.useMemo(() => {
+		if (!activeData.length) return [] as Row[];
+
+		// lọc theo ngày (nếu có)
+		const byDate = dateObj
+			? activeData.filter((r: any) => {
+					const when = getWhen(r);
+					if (!when) return false;
+					// so sánh theo ngày (YYYY-MM-DD)
+					return dayjs(when).isSame(dateObj, "day");
+				})
+			: activeData;
+
+		// sắp xếp theo thời gian (recorded_at/created_at)
+		const bySort = [...byDate].sort((a: any, b: any) => {
+			const da = getWhen(a);
+			const db = getWhen(b);
+			// ISO string so sánh chuỗi OK nếu cùng định dạng
 			return sort === "newest" ? db.localeCompare(da) : da.localeCompare(db);
 		});
-		const q = search.trim().toLowerCase();
-		if (!q) return sorted;
-		return sorted.filter((r) => JSON.stringify(r).toLowerCase().includes(q));
-	};
 
-	const paginate = <T,>(rows: T[]) => rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+		// tìm kiếm nội dung (deferred để debounce)
+		const q = searchDeferred.trim().toLowerCase();
+		if (!q) return bySort;
+
+		return bySort.filter((r) => {
+			// Tối ưu: chỉ join vài trường phổ biến; nếu cần sâu hơn dùng JSON.stringify
+			const buf = [
+				(r as any).competition_id,
+				(r as any).medal_won,
+				(r as any).final_rank,
+				(r as any).notes,
+				(r as any).result_data,
+				getWhen(r),
+			]
+				.filter(Boolean)
+				.join(" ")
+				.toLowerCase();
+
+			return buf.includes(q);
+		});
+	}, [activeData, dateObj, sort, searchDeferred]);
+
+	const pagedRows = React.useMemo(
+		() => filteredSorted.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
+		[filteredSorted, page, rowsPerPage]
+	);
 
 	const handleAdd = () => {
 		if (!athleteId || !sportKey) return;
@@ -181,8 +231,91 @@ export default function Page() {
 		router.push(`/dashboard/customers/achievements/${sportKey}/update/${id}?athlete=${athleteId}`);
 	};
 
+	const TableShell = (props: { title: string; showRecordedAt?: boolean }) => {
+		const { title, showRecordedAt } = props;
+		return (
+			<SectionCard
+				title={title}
+				header={
+					<Button onClick={handleAdd} startIcon={<Plus />} size="small" variant="contained">
+						Thêm mới
+					</Button>
+				}
+			>
+				<Table sx={{ minWidth: 1100 }}>
+					<TableHead>
+						<TableRow>
+							<TableCell>Mã</TableCell>
+							<TableCell>Giải đấu</TableCell>
+							<TableCell>Huy chương</TableCell>
+							<TableCell>Hạng</TableCell>
+							<TableCell>Kết quả</TableCell>
+							<TableCell>Ghi chú</TableCell>
+							<TableCell>{showRecordedAt ? "Ngày ghi nhận" : "Ngày tạo"}</TableCell>
+							<TableCell align="right">Sửa</TableCell>
+						</TableRow>
+					</TableHead>
+					<TableBody>
+						{loading ? (
+							<TableRow>
+								<TableCell colSpan={8}>
+									<Box p={2} textAlign="center" color="text.secondary">
+										Đang tải dữ liệu…
+									</Box>
+								</TableCell>
+							</TableRow>
+						) : pagedRows.length ? (
+							pagedRows.map((r: any) => {
+								const when = showRecordedAt ? r.recorded_at || r.created_at : r.created_at;
+								return (
+									<TableRow key={r.id} hover>
+										<TableCell>{r.id}</TableCell>
+										<TableCell>{r.competition_id ?? "—"}</TableCell>
+										<TableCell>{r.medal_won ?? "—"}</TableCell>
+										<TableCell>{r.final_rank != null ? <Chip size="small" label={r.final_rank} /> : "—"}</TableCell>
+										<TableCell>{parseResult(r.result_data)}</TableCell>
+										<TableCell>{r.notes || "—"}</TableCell>
+										<TableCell>{when ? dayjs(when).format("DD/MM/YYYY") : "—"}</TableCell>
+										<TableCell align="right">
+											<IconButton size="small" onClick={() => handleEdit(r.id)}>
+												<PencilSimple />
+											</IconButton>
+										</TableCell>
+									</TableRow>
+								);
+							})
+						) : (
+							<TableRow>
+								<TableCell colSpan={8}>
+									<Box p={2} textAlign="center" color="text.secondary">
+										Không có dữ liệu
+									</Box>
+								</TableCell>
+							</TableRow>
+						)}
+					</TableBody>
+				</Table>
+
+				<TablePagination
+					component="div"
+					count={filteredSorted.length}
+					page={page}
+					rowsPerPage={rowsPerPage}
+					onPageChange={(_, p) => setPage(p)}
+					onRowsPerPageChange={(e) => {
+						setRowsPerPage(parseInt(e.target.value, 10));
+						setPage(0);
+					}}
+					rowsPerPageOptions={[5, 10, 25]}
+					labelRowsPerPage="Dòng / trang"
+				/>
+			</SectionCard>
+		);
+	};
+
 	return (
 		<Stack spacing={3}>
+			{/* Filters */}
 			<Stack
 				direction={{ xs: "column", md: "row" }}
 				spacing={2}
@@ -228,281 +361,11 @@ export default function Page() {
 				</TextField>
 			</Stack>
 
-			{sportKey === "archery" && (
-				<SectionCard
-					title="Bắn cung — Thành tích thi đấu"
-					header={
-						<Button onClick={handleAdd} startIcon={<Plus />} size="small" variant="contained">
-							Thêm mới
-						</Button>
-					}
-				>
-					<Table sx={{ minWidth: 1100 }}>
-						<TableHead>
-							<TableRow>
-								<TableCell>Mã</TableCell>
-								<TableCell>Giải đấu</TableCell>
-								<TableCell>Huy chương</TableCell>
-								<TableCell>Hạng</TableCell>
-								<TableCell>Kết quả</TableCell>
-								<TableCell>Ghi chú</TableCell>
-								<TableCell>Ngày ghi nhận</TableCell>
-								<TableCell align="right">Sửa</TableCell>
-							</TableRow>
-						</TableHead>
-						<TableBody>
-							{paginate(applySortFilter(arch)).map((r) => (
-								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
-									<TableCell>{r.competition_id ?? "—"}</TableCell>
-									<TableCell>{r.medal_won ?? "—"}</TableCell>
-									<TableCell>{r.final_rank != null ? <Chip size="small" label={r.final_rank} /> : "—"}</TableCell>
-									<TableCell>{parseResult(r.result_data)}</TableCell>
-									<TableCell>{r.notes || "—"}</TableCell>
-									<TableCell>
-										{r.recorded_at
-											? dayjs(r.recorded_at).format("DD/MM/YYYY")
-											: r.created_at
-												? dayjs(r.created_at).format("DD/MM/YYYY")
-												: "—"}
-									</TableCell>
-									<TableCell align="right">
-										<IconButton size="small" onClick={() => handleEdit(r.id)}>
-											<PencilSimple />
-										</IconButton>
-									</TableCell>
-								</TableRow>
-							))}
-							{!loading && arch.length === 0 && (
-								<TableRow>
-									<TableCell colSpan={8}>
-										<Box p={2} textAlign="center" color="text.secondary">
-											Không có dữ liệu
-										</Box>
-									</TableCell>
-								</TableRow>
-							)}
-						</TableBody>
-					</Table>
-					<TablePagination
-						component="div"
-						count={applySortFilter(arch).length}
-						page={page}
-						rowsPerPage={rowsPerPage}
-						onPageChange={(_, p) => setPage(p)}
-						onRowsPerPageChange={(e) => {
-							setRowsPerPage(parseInt(e.target.value, 10));
-							setPage(0);
-						}}
-						rowsPerPageOptions={[5, 10, 25]}
-						labelRowsPerPage="Dòng / trang"
-					/>
-				</SectionCard>
-			)}
-
-			{sportKey === "shooting" && (
-				<SectionCard
-					title="Bắn súng — Thành tích thi đấu"
-					header={
-						<Button onClick={handleAdd} startIcon={<Plus />} size="small" variant="contained">
-							Thêm mới
-						</Button>
-					}
-				>
-					<Table sx={{ minWidth: 1100 }}>
-						<TableHead>
-							<TableRow>
-								<TableCell>Mã</TableCell>
-								<TableCell>Giải đấu</TableCell>
-								<TableCell>Huy chương</TableCell>
-								<TableCell>Hạng</TableCell>
-								<TableCell>Kết quả</TableCell>
-								<TableCell>Ghi chú</TableCell>
-								<TableCell>Ngày tạo</TableCell>
-								<TableCell align="right">Sửa</TableCell>
-							</TableRow>
-						</TableHead>
-						<TableBody>
-							{paginate(applySortFilter(shoot)).map((r) => (
-								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
-									<TableCell>{r.competition_id ?? "—"}</TableCell>
-									<TableCell>{r.medal_won ?? "—"}</TableCell>
-									<TableCell>{r.final_rank != null ? <Chip size="small" label={r.final_rank} /> : "—"}</TableCell>
-									<TableCell>{parseResult(r.result_data)}</TableCell>
-									<TableCell>{r.notes || "—"}</TableCell>
-									<TableCell>{r.created_at ? dayjs(r.created_at).format("DD/MM/YYYY") : "—"}</TableCell>
-									<TableCell align="right">
-										<IconButton size="small" onClick={() => handleEdit(r.id)}>
-											<PencilSimple />
-										</IconButton>
-									</TableCell>
-								</TableRow>
-							))}
-							{!loading && shoot.length === 0 && (
-								<TableRow>
-									<TableCell colSpan={8}>
-										<Box p={2} textAlign="center" color="text.secondary">
-											Không có dữ liệu
-										</Box>
-									</TableCell>
-								</TableRow>
-							)}
-						</TableBody>
-					</Table>
-					<TablePagination
-						component="div"
-						count={applySortFilter(shoot).length}
-						page={page}
-						rowsPerPage={rowsPerPage}
-						onPageChange={(_, p) => setPage(p)}
-						onRowsPerPageChange={(e) => {
-							setRowsPerPage(parseInt(e.target.value, 10));
-							setPage(0);
-						}}
-						rowsPerPageOptions={[5, 10, 25]}
-						labelRowsPerPage="Dòng / trang"
-					/>
-				</SectionCard>
-			)}
-
-			{sportKey === "boxing" && (
-				<SectionCard
-					title="Boxing — Thành tích thi đấu"
-					header={
-						<Button onClick={handleAdd} startIcon={<Plus />} size="small" variant="contained">
-							Thêm mới
-						</Button>
-					}
-				>
-					<Table sx={{ minWidth: 1100 }}>
-						<TableHead>
-							<TableRow>
-								<TableCell>Mã</TableCell>
-								<TableCell>Giải đấu</TableCell>
-								<TableCell>Huy chương</TableCell>
-								<TableCell>Hạng</TableCell>
-								<TableCell>Kết quả</TableCell>
-								<TableCell>Ghi chú</TableCell>
-								<TableCell>Ngày tạo</TableCell>
-								<TableCell align="right">Sửa</TableCell>
-							</TableRow>
-						</TableHead>
-						<TableBody>
-							{paginate(applySortFilter(box)).map((r) => (
-								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
-									<TableCell>{r.competition_id ?? "—"}</TableCell>
-									<TableCell>{r.medal_won ?? "—"}</TableCell>
-									<TableCell>{r.final_rank != null ? <Chip size="small" label={r.final_rank} /> : "—"}</TableCell>
-									<TableCell>{parseResult(r.result_data)}</TableCell>
-									<TableCell>{r.notes || "—"}</TableCell>
-									<TableCell>{r.created_at ? dayjs(r.created_at).format("DD/MM/YYYY") : "—"}</TableCell>
-									<TableCell align="right">
-										<IconButton size="small" onClick={() => handleEdit(r.id)}>
-											<PencilSimple />
-										</IconButton>
-									</TableCell>
-								</TableRow>
-							))}
-							{!loading && box.length === 0 && (
-								<TableRow>
-									<TableCell colSpan={8}>
-										<Box p={2} textAlign="center" color="text.secondary">
-											Không có dữ liệu
-										</Box>
-									</TableCell>
-								</TableRow>
-							)}
-						</TableBody>
-					</Table>
-					<TablePagination
-						component="div"
-						count={applySortFilter(box).length}
-						page={page}
-						rowsPerPage={rowsPerPage}
-						onPageChange={(_, p) => setPage(p)}
-						onRowsPerPageChange={(e) => {
-							setRowsPerPage(parseInt(e.target.value, 10));
-							setPage(0);
-						}}
-						rowsPerPageOptions={[5, 10, 25]}
-						labelRowsPerPage="Dòng / trang"
-					/>
-				</SectionCard>
-			)}
-
-			{sportKey === "taekwondo" && (
-				<SectionCard
-					title="Taekwondo — Thành tích thi đấu"
-					header={
-						<Button onClick={handleAdd} startIcon={<Plus />} size="small" variant="contained">
-							Thêm mới
-						</Button>
-					}
-				>
-					<Table sx={{ minWidth: 1100 }}>
-						<TableHead>
-							<TableRow>
-								<TableCell>Mã</TableCell>
-								<TableCell>Giải đấu</TableCell>
-								<TableCell>Huy chương</TableCell>
-								<TableCell>Hạng</TableCell>
-								<TableCell>Kết quả</TableCell>
-								<TableCell>Ghi chú</TableCell>
-								<TableCell>Ngày ghi nhận</TableCell>
-								<TableCell align="right">Sửa</TableCell>
-							</TableRow>
-						</TableHead>
-						<TableBody>
-							{paginate(applySortFilter(tkd)).map((r) => (
-								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
-									<TableCell>{r.competition_id ?? "—"}</TableCell>
-									<TableCell>{r.medal_won ?? "—"}</TableCell>
-									<TableCell>{r.final_rank != null ? <Chip size="small" label={r.final_rank} /> : "—"}</TableCell>
-									<TableCell>{parseResult(r.result_data)}</TableCell>
-									<TableCell>{r.notes || "—"}</TableCell>
-									<TableCell>
-										{r.recorded_at
-											? dayjs(r.recorded_at).format("DD/MM/YYYY")
-											: r.created_at
-												? dayjs(r.created_at).format("DD/MM/YYYY")
-												: "—"}
-									</TableCell>
-									<TableCell align="right">
-										<IconButton size="small" onClick={() => handleEdit(r.id)}>
-											<PencilSimple />
-										</IconButton>
-									</TableCell>
-								</TableRow>
-							))}
-							{!loading && tkd.length === 0 && (
-								<TableRow>
-									<TableCell colSpan={8}>
-										<Box p={2} textAlign="center" color="text.secondary">
-											Không có dữ liệu
-										</Box>
-									</TableCell>
-								</TableRow>
-							)}
-						</TableBody>
-					</Table>
-					<TablePagination
-						component="div"
-						count={applySortFilter(tkd).length}
-						page={page}
-						rowsPerPage={rowsPerPage}
-						onPageChange={(_, p) => setPage(p)}
-						onRowsPerPageChange={(e) => {
-							setRowsPerPage(parseInt(e.target.value, 10));
-							setPage(0);
-						}}
-						rowsPerPageOptions={[5, 10, 25]}
-						labelRowsPerPage="Dòng / trang"
-					/>
-				</SectionCard>
-			)}
+			{/* Tables */}
+			{sportKey === "archery" && <TableShell title="Bắn cung — Thành tích thi đấu" showRecordedAt />}
+			{sportKey === "shooting" && <TableShell title="Bắn súng — Thành tích thi đấu" />}
+			{sportKey === "boxing" && <TableShell title="Boxing — Thành tích thi đấu" />}
+			{sportKey === "taekwondo" && <TableShell title="Taekwondo — Thành tích thi đấu" showRecordedAt />}
 
 			{!sportKey && (
 				<Box p={2} textAlign="center" color="text.secondary" border="1px dashed" borderRadius={1.5}>

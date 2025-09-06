@@ -3,16 +3,16 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
-	listArcheryPracticesByAthlete,
-	listBoxingPracticesByAthlete,
-	listShootingPracticesByAthlete,
-	listTaekwondoPracticesByAthlete,
+	listArcheryPracticesPageByAthlete,
+	listBoxingPracticesPageByAthlete,
+	listShootingPracticesPageByAthlete,
+	listTaekwondoPracticesPageByAthlete,
 	type ArcheryPracticeDTO,
 	type BoxingPracticeDTO,
 	type ShootingPracticeDTO,
 	type TaekwondoPracticeDTO,
 } from "@/services/practice.service";
-import { fetchUserByIdFromList, getLoggedInUserId } from "@/services/user.service";
+import { fetchUserByIdFromList, getLoggedInUserId, getUserById } from "@/services/user.service";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -33,6 +33,15 @@ import dayjs from "dayjs";
 import "dayjs/locale/vi";
 
 dayjs.locale("vi");
+
+function useDebouncedValue<T>(value: T, delay = 350) {
+	const [v, setV] = React.useState(value);
+	React.useEffect(() => {
+		const t = setTimeout(() => setV(value), delay);
+		return () => clearTimeout(t);
+	}, [value, delay]);
+	return v;
+}
 
 function PracticeTableCard({
 	title,
@@ -61,108 +70,133 @@ export default function Page(): React.JSX.Element {
 	const [date, setDate] = React.useState<string>(dayjs().format("YYYY-MM-DD"));
 	const [search, setSearch] = React.useState<string>("");
 
-	const [tkd, setTkd] = React.useState<TaekwondoPracticeDTO[]>([]);
-	const [shoot, setShoot] = React.useState<ShootingPracticeDTO[]>([]);
-	const [box, setBox] = React.useState<BoxingPracticeDTO[]>([]);
-	const [arch, setArch] = React.useState<ArcheryPracticeDTO[]>([]);
+	// debounce để không spam API
+	const debSearch = useDebouncedValue(search, 350);
+	const debDate = useDebouncedValue(date, 350);
 
+	const [rows, setRows] = React.useState<any[]>([]);
+	const [total, setTotal] = React.useState(0);
 	const [loading, setLoading] = React.useState(false);
 
-	const [page, setPage] = React.useState(0);
+	const [page, setPage] = React.useState(0); // 0-based
 	const [rowsPerPage, setRowsPerPage] = React.useState(5);
 
 	const [athleteId, setAthleteId] = React.useState<number | undefined>(undefined);
 	const [sportKey, setSportKey] = React.useState<"taekwondo" | "shooting" | "boxing" | "archery" | "">("");
 
+	// Lấy user nhanh: ưu tiên getUserById, fallback list
 	React.useEffect(() => {
 		let cancelled = false;
-		async function loadUser() {
+		(async () => {
 			const uid = getLoggedInUserId();
 			if (!uid) return;
-			const user = await fetchUserByIdFromList(uid);
-			if (!user) return;
-			if (!cancelled) {
-				setAthleteId(Number((user as any)?.id ?? (user as any)?.user_id));
-				const s = String((user as any)?.sport ?? "")
-					.toLowerCase()
-					.trim();
-				if (s === "shooting" || s.includes("bắn súng")) setSportKey("shooting");
-				else if (s === "archery" || s.includes("bắn cung")) setSportKey("archery");
-				else if (s === "taekwondo") setSportKey("taekwondo");
-				else if (s === "boxing") setSportKey("boxing");
-			}
-		}
-		loadUser();
+
+			let user = await getUserById(uid);
+			if (!user) user = await fetchUserByIdFromList(uid);
+			if (!user || cancelled) return;
+
+			setAthleteId(Number((user as any).id ?? (user as any).user_id));
+			const s = String((user as any)?.sport ?? "")
+				.toLowerCase()
+				.trim();
+			if (s === "shooting" || s.includes("bắn súng")) setSportKey("shooting");
+			else if (s === "archery" || s.includes("bắn cung")) setSportKey("archery");
+			else if (s === "taekwondo") setSportKey("taekwondo");
+			else if (s === "boxing") setSportKey("boxing");
+		})();
 		return () => {
 			cancelled = true;
 		};
 	}, []);
 
-	React.useEffect(() => {
-		let cancelled = false;
-		async function load() {
-			if (!athleteId) return;
-			try {
-				setLoading(true);
-				if (sportKey === "taekwondo") {
-					const r = await listTaekwondoPracticesByAthlete(athleteId, "id-desc");
-					if (!cancelled) setTkd(r);
-				} else if (sportKey === "shooting") {
-					const r = await listShootingPracticesByAthlete(athleteId, "id-desc");
-					if (!cancelled) setShoot(r);
-				} else if (sportKey === "boxing") {
-					const r = await listBoxingPracticesByAthlete(athleteId, "id-desc");
-					if (!cancelled) setBox(r);
-				} else if (sportKey === "archery") {
-					const r = await listArcheryPracticesByAthlete(athleteId, "id-desc");
-					if (!cancelled) setArch(r);
-				}
-			} finally {
-				if (!cancelled) setLoading(false);
-			}
-		}
-		load();
-		return () => {
-			cancelled = true;
-		};
-	}, [athleteId, sportKey]);
-
+	// Reset trang khi đổi filter
 	React.useEffect(() => {
 		setPage(0);
-	}, [sportKey, search, sort, date]);
+	}, [sportKey, debSearch, debDate, sort]);
 
-	const applyCommonSort = <T extends { created_at?: string; session_date?: string }>(arr: T[]) => {
-		const byTime = [...arr].sort((a, b) => {
-			const da = a.session_date || a.created_at || "";
-			const db = b.session_date || b.created_at || "";
-			return sort === "newest" ? db.localeCompare(da) : da.localeCompare(db);
-		});
-		const q = search.trim().toLowerCase();
-		const bySearch = q ? byTime.filter((r) => JSON.stringify(r).toLowerCase().includes(q)) : byTime;
-		const byDate = date
-			? bySearch.filter((r) => (r as any).session_date && dayjs((r as any).session_date).isSame(dayjs(date), "day"))
-			: bySearch;
-		return byDate;
-	};
+	// Fetch 1 trang từ server + hủy request cũ
+	React.useEffect(() => {
+		if (!athleteId || !sportKey) return;
+		const controller = new AbortController();
 
-	const applyPagination = <T,>(rows: T[]) => rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+		(async () => {
+			try {
+				setLoading(true);
+
+				// Backend của bạn có thể chưa hỗ trợ q / session_date. Cứ gửi, nếu chưa hỗ trợ sẽ bị bỏ qua.
+				const extraFilters: Record<string, string> = {};
+				if (debSearch.trim()) extraFilters.q = debSearch.trim();
+				if (debDate) extraFilters.session_date = debDate; // với Boxing không có field này → server sẽ bỏ qua
+
+				const orderby = sort === "newest" ? "id-desc" : "id-asc";
+				const p = page + 1;
+
+				let res;
+				if (sportKey === "taekwondo")
+					res = await listTaekwondoPracticesPageByAthlete(
+						athleteId,
+						p,
+						rowsPerPage,
+						orderby,
+						extraFilters,
+						controller.signal
+					);
+				else if (sportKey === "shooting")
+					res = await listShootingPracticesPageByAthlete(
+						athleteId,
+						p,
+						rowsPerPage,
+						orderby,
+						extraFilters,
+						controller.signal
+					);
+				else if (sportKey === "boxing")
+					res = await listBoxingPracticesPageByAthlete(
+						athleteId,
+						p,
+						rowsPerPage,
+						orderby,
+						extraFilters,
+						controller.signal
+					);
+				else
+					res = await listArcheryPracticesPageByAthlete(
+						athleteId,
+						p,
+						rowsPerPage,
+						orderby,
+						extraFilters,
+						controller.signal
+					);
+
+				setRows(res.data);
+				setTotal(res.total ?? res.data.length); // fallback nếu API chưa trả total
+			} catch (e: any) {
+				if (e?.name !== "CanceledError" && e?.name !== "AbortError") {
+					console.error(e);
+					setRows([]);
+					setTotal(0);
+				}
+			} finally {
+				setLoading(false);
+			}
+		})();
+
+		return () => controller.abort();
+	}, [athleteId, sportKey, page, rowsPerPage, debSearch, debDate, sort]);
 
 	const handleAdd = () => {
-		if (!athleteId || !sportKey) return;
-		router.push(`/dashboard/customers/training/${sportKey}/add?athlete=${athleteId}`);
+		if (athleteId && sportKey) router.push(`/dashboard/customers/training/${sportKey}/add?athlete=${athleteId}`);
 	};
 
+	// === Render theo môn (giữ UI như hiện tại) ===
 	return (
 		<Stack spacing={3}>
 			<Stack
 				direction="row"
 				spacing={2}
 				alignItems="center"
-				sx={{
-					width: "100%",
-					flexWrap: { xs: "wrap", md: "nowrap" },
-					"& > *": { height: 40 },
-				}}
+				sx={{ width: "100%", flexWrap: { xs: "wrap", md: "nowrap" }, "& > *": { height: 40 } }}
 			>
 				<TextField
 					fullWidth
@@ -193,7 +227,7 @@ export default function Page(): React.JSX.Element {
 					select
 					label="Sắp xếp thời gian"
 					value={sort}
-					onChange={(e) => setSort(e.target.value as "newest" | "oldest")}
+					onChange={(e) => setSort(e.target.value as any)}
 					size="small"
 					sx={{ width: { xs: "100%", md: 200 }, flex: { xs: "1 1 200px", md: "0 0 200px" } }}
 				>
@@ -202,11 +236,12 @@ export default function Page(): React.JSX.Element {
 				</TextField>
 			</Stack>
 
+			{/* Taekwondo */}
 			{sportKey === "taekwondo" && (
 				<PracticeTableCard
 					title="Taekwondo — Buổi tập"
 					header={
-						<Button onClick={handleAdd} startIcon={<></>} size="small" variant="contained">
+						<Button onClick={handleAdd} size="small" variant="contained">
 							Thêm mới
 						</Button>
 					}
@@ -218,13 +253,13 @@ export default function Page(): React.JSX.Element {
 								<TableCell>Ngày tập</TableCell>
 								<TableCell>Kỹ thuật</TableCell>
 								<TableCell>Drills</TableCell>
-								<TableCell>Đấu đối kháng (phút)</TableCell>
+								<TableCell>Đối kháng (phút)</TableCell>
 								<TableCell>Bài thể lực</TableCell>
 								<TableCell>Ghi chú</TableCell>
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{applyPagination(applyCommonSort(tkd)).map((r) => (
+							{(loading ? [] : (rows as TaekwondoPracticeDTO[])).map((r) => (
 								<TableRow key={r.id} hover>
 									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
@@ -235,7 +270,7 @@ export default function Page(): React.JSX.Element {
 									<TableCell>{r.notes || "-"}</TableCell>
 								</TableRow>
 							))}
-							{!loading && tkd.length === 0 && (
+							{!loading && rows.length === 0 && (
 								<TableRow>
 									<TableCell colSpan={7}>
 										<Box p={2} textAlign="center" color="text.secondary">
@@ -248,7 +283,7 @@ export default function Page(): React.JSX.Element {
 					</Table>
 					<TablePagination
 						component="div"
-						count={applyCommonSort(tkd).length}
+						count={total}
 						page={page}
 						rowsPerPage={rowsPerPage}
 						onPageChange={(_, p) => setPage(p)}
@@ -262,11 +297,12 @@ export default function Page(): React.JSX.Element {
 				</PracticeTableCard>
 			)}
 
+			{/* Shooting */}
 			{sportKey === "shooting" && (
 				<PracticeTableCard
 					title="Bắn súng — Buổi tập"
 					header={
-						<Button onClick={handleAdd} startIcon={<></>} size="small" variant="contained">
+						<Button onClick={handleAdd} size="small" variant="contained">
 							Thêm mới
 						</Button>
 					}
@@ -286,7 +322,7 @@ export default function Page(): React.JSX.Element {
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{applyPagination(applyCommonSort(shoot)).map((r) => (
+							{(loading ? [] : (rows as ShootingPracticeDTO[])).map((r) => (
 								<TableRow key={r.id} hover>
 									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
@@ -299,7 +335,7 @@ export default function Page(): React.JSX.Element {
 									<TableCell>{r.notes || "-"}</TableCell>
 								</TableRow>
 							))}
-							{!loading && shoot.length === 0 && (
+							{!loading && rows.length === 0 && (
 								<TableRow>
 									<TableCell colSpan={9}>
 										<Box p={2} textAlign="center" color="text.secondary">
@@ -312,7 +348,7 @@ export default function Page(): React.JSX.Element {
 					</Table>
 					<TablePagination
 						component="div"
-						count={applyCommonSort(shoot).length}
+						count={total}
 						page={page}
 						rowsPerPage={rowsPerPage}
 						onPageChange={(_, p) => setPage(p)}
@@ -326,11 +362,12 @@ export default function Page(): React.JSX.Element {
 				</PracticeTableCard>
 			)}
 
+			{/* Boxing */}
 			{sportKey === "boxing" && (
 				<PracticeTableCard
 					title="Boxing — Buổi tập"
 					header={
-						<Button onClick={handleAdd} startIcon={<></>} size="small" variant="contained">
+						<Button onClick={handleAdd} size="small" variant="contained">
 							Thêm mới
 						</Button>
 					}
@@ -350,7 +387,7 @@ export default function Page(): React.JSX.Element {
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{applyPagination(applyCommonSort(box)).map((r) => (
+							{(loading ? [] : (rows as BoxingPracticeDTO[])).map((r) => (
 								<TableRow key={r.id} hover>
 									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.round_number ?? "-"}</TableCell>
@@ -363,7 +400,7 @@ export default function Page(): React.JSX.Element {
 									<TableCell>{r.created_at ? dayjs(r.created_at).format("DD/MM/YYYY") : "-"}</TableCell>
 								</TableRow>
 							))}
-							{!loading && box.length === 0 && (
+							{!loading && rows.length === 0 && (
 								<TableRow>
 									<TableCell colSpan={9}>
 										<Box p={2} textAlign="center" color="text.secondary">
@@ -376,7 +413,7 @@ export default function Page(): React.JSX.Element {
 					</Table>
 					<TablePagination
 						component="div"
-						count={applyCommonSort(box).length}
+						count={total}
 						page={page}
 						rowsPerPage={rowsPerPage}
 						onPageChange={(_, p) => setPage(p)}
@@ -390,11 +427,12 @@ export default function Page(): React.JSX.Element {
 				</PracticeTableCard>
 			)}
 
+			{/* Archery */}
 			{sportKey === "archery" && (
 				<PracticeTableCard
 					title="Bắn cung — Buổi tập"
 					header={
-						<Button onClick={handleAdd} startIcon={<></>} size="small" variant="contained">
+						<Button onClick={handleAdd} size="small" variant="contained">
 							Thêm mới
 						</Button>
 					}
@@ -413,7 +451,7 @@ export default function Page(): React.JSX.Element {
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{applyPagination(applyCommonSort(arch)).map((r) => (
+							{(loading ? [] : (rows as ArcheryPracticeDTO[])).map((r) => (
 								<TableRow key={r.id} hover>
 									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
@@ -425,7 +463,7 @@ export default function Page(): React.JSX.Element {
 									<TableCell>{r.y_coord ?? "-"}</TableCell>
 								</TableRow>
 							))}
-							{!loading && arch.length === 0 && (
+							{!loading && rows.length === 0 && (
 								<TableRow>
 									<TableCell colSpan={8}>
 										<Box p={2} textAlign="center" color="text.secondary">
@@ -438,7 +476,7 @@ export default function Page(): React.JSX.Element {
 					</Table>
 					<TablePagination
 						component="div"
-						count={applyCommonSort(arch).length}
+						count={total}
 						page={page}
 						rowsPerPage={rowsPerPage}
 						onPageChange={(_, p) => setPage(p)}

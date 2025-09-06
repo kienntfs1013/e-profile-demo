@@ -16,28 +16,21 @@ import { Avatar, Box, Button, MenuItem, Paper, Stack, TextField, Typography, use
 import { GeneralSection } from "@/components/customer-detail/general-section";
 import { SectionCard } from "@/components/customer-detail/section-card";
 
+/* ========= code-split các tab nặng ========= */
 const HealthSection = dynamic(
 	() => import("@/components/customer-detail/health-section").then((m) => m.HealthSection),
-	{
-		ssr: false,
-		loading: () => <Box p={2}>Đang tải mục Sức khỏe…</Box>,
-	}
+	{ ssr: false, loading: () => <Box p={2}>Đang tải mục Sức khỏe…</Box> }
 );
 const TrainingSection = dynamic(
 	() => import("@/components/customer-detail/training-section").then((m) => m.TrainingSection),
-	{
-		ssr: false,
-		loading: () => <Box p={2}>Đang tải mục Tập luyện…</Box>,
-	}
+	{ ssr: false, loading: () => <Box p={2}>Đang tải mục Tập luyện…</Box> }
 );
 const AchievementSection = dynamic(
 	() => import("@/components/customer-detail/achievement-section").then((m) => m.AchievementSection),
-	{
-		ssr: false,
-		loading: () => <Box p={2}>Đang tải mục Thành tích…</Box>,
-	}
+	{ ssr: false, loading: () => <Box p={2}>Đang tải mục Thành tích…</Box> }
 );
 
+/* ========= helpers nhỏ ========= */
 const sportLabel = (v?: string) => {
 	if (!v) return "-";
 	const s = v.toLowerCase();
@@ -47,7 +40,6 @@ const sportLabel = (v?: string) => {
 	if (s.includes("boxing")) return "Boxing";
 	return v;
 };
-
 type DetailUser = {
 	id: string;
 	name?: string;
@@ -61,13 +53,8 @@ type DetailUser = {
 	birthday?: string;
 	status?: string;
 	createdAt?: string;
-	address?: {
-		street?: string;
-		city?: string;
-		state?: string;
-	};
+	address?: { street?: string; city?: string; state?: string };
 };
-
 type TabKey = "general" | "health" | "training" | "achievement";
 const TABS: { key: TabKey; label: string }[] = [
 	{ key: "general", label: "Thông tin chung" },
@@ -124,6 +111,7 @@ function calcAge(birthday?: string): number | undefined {
 	return age;
 }
 
+/* ========= Page ========= */
 export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 	const router = useRouter();
 	const isDesktop = useMediaQuery("(min-width:900px)", { noSsr: true });
@@ -134,33 +122,51 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 	const [viewerIsAthlete, setViewerIsAthlete] = React.useState(false);
 	const [isPending, startTransition] = React.useTransition();
 
+	/* ---- Preload 3 tab nặng khi rảnh (tăng cảm giác mượt) ---- */
 	React.useEffect(() => {
-		let cancelled = false;
+		const run = () => {
+			// @ts-ignore
+			import("@/components/customer-detail/health-section");
+			// @ts-ignore
+			import("@/components/customer-detail/training-section");
+			// @ts-ignore
+			import("@/components/customer-detail/achievement-section");
+		};
+		if (typeof window !== "undefined") {
+			const idle = (window as any).requestIdleCallback || ((cb: Function) => setTimeout(cb, 300));
+			idle(() => run());
+		}
+	}, []);
+
+	/* ---- Tải dữ liệu song song + cleanup ---- */
+	React.useEffect(() => {
+		let mounted = true;
 
 		(async () => {
 			try {
 				setLoading(true);
 
-				const viewerId = getLoggedInUserId?.();
-				if (viewerId) {
-					const viewer =
-						(await getUserById(viewerId).catch(() => null)) ??
-						(await fetchUserByIdFromList(viewerId).catch(() => null));
-					if (!cancelled && viewer) setViewerIsAthlete(isAthleteRole(viewer.role));
-				}
-
+				const viewerId = getLoggedInUserId?.() || null;
 				const numericId = Number(id);
 				if (!Number.isFinite(numericId)) {
-					if (!cancelled) setUser(undefined);
+					if (mounted) setUser(undefined);
 					return;
 				}
 
-				let apiUser = await getUserById(numericId);
-				if (!apiUser) apiUser = await fetchUserByIdFromList(numericId);
-				const athlete = await fetchAthleteByUserId(numericId).catch(() => null);
+				const viewerPromise = viewerId ? getUserById(viewerId).catch(() => null) : Promise.resolve(null);
+				const apiUserPromise = (async () => {
+					const u = await getUserById(numericId);
+					return u ?? (await fetchUserByIdFromList(numericId).catch(() => null));
+				})();
+				const athletePromise = fetchAthleteByUserId(numericId).catch(() => null);
 
+				const [viewer, apiUser, athlete] = await Promise.all([viewerPromise, apiUserPromise, athletePromise]);
+
+				if (!mounted) return;
+
+				if (viewer) setViewerIsAthlete(isAthleteRole(viewer.role));
 				if (!apiUser) {
-					if (!cancelled) setUser(undefined);
+					setUser(undefined);
 					return;
 				}
 
@@ -176,7 +182,13 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 					age: calcAge(apiUser.birthday ?? athlete?.date_of_birth),
 					phone: apiUser.phoneNumber ?? athlete?.contact_phone ?? undefined,
 					sport: toSportCode(apiUser.sport) ?? apiUser.sport ?? undefined,
-					gender: toGenderCode(apiUser.gender ?? athlete?.gender),
+					gender: toGenderCode(
+						apiUser.gender !== undefined
+							? String(apiUser.gender)
+							: athlete?.gender !== undefined
+								? String(athlete?.gender)
+								: undefined
+					),
 					birthday: (apiUser.birthday ?? athlete?.date_of_birth) || undefined,
 					status: apiUser.is_active === 1 ? "Đang hoạt động" : "Tạm ngưng",
 					createdAt: apiUser.created_at || undefined,
@@ -187,14 +199,14 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 					},
 				};
 
-				if (!cancelled) setUser(mapped);
+				setUser(mapped);
 			} finally {
-				if (!cancelled) setLoading(false);
+				if (mounted) setLoading(false);
 			}
 		})();
 
 		return () => {
-			cancelled = true;
+			mounted = false;
 		};
 	}, [id]);
 
@@ -288,7 +300,6 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 
 			<SectionCard>
 				{tab === "general" && <GeneralSection id={user.id} />}
-
 				{!viewerIsAthlete && tab === "health" && <HealthSection user={user as any} />}
 				{!viewerIsAthlete && tab === "training" && <TrainingSection user={user as any} />}
 				{!viewerIsAthlete && tab === "achievement" && <AchievementSection user={user as any} />}

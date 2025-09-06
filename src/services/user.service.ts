@@ -1,4 +1,3 @@
-// src/services/user.service.ts
 import { api } from "@/lib/api/client";
 
 /* ========= Types ========= */
@@ -8,8 +7,8 @@ export type UserDTO = {
 	firstName?: string;
 	lastName?: string;
 	phoneNumber?: string;
-	role?: string | number;
-	gender?: string;
+	role?: string | number | { id?: number; name?: string } | null;
+	gender?: string | number | null;
 	birthday?: string;
 	sport?: string;
 	country?: string;
@@ -42,7 +41,6 @@ type ListResponse<T> = { status: "success" | "error"; message?: string; data: T[
 type ItemResponse<T> = { status: "success" | "error"; message?: string; data: T };
 type RegistryResponse = { status: "success" | "error"; message?: string; data?: number };
 
-/** API thực tế có meta phân trang (theo Postman: total, page, totalpage, time, link...) */
 export type PagedListResponse<T> = ListResponse<T> & {
 	total?: number;
 	page?: number;
@@ -50,6 +48,10 @@ export type PagedListResponse<T> = ListResponse<T> & {
 	time?: number;
 	link?: string;
 };
+
+/* ========= Config ========= */
+const DEFAULT_PAGE_LIMIT = 25;
+const USER_CACHE_TTL_MS = 30_000;
 
 /* ========= Utils ========= */
 export function buildImageUrl(path?: string): string | undefined {
@@ -62,6 +64,7 @@ export function buildImageUrl(path?: string): string | undefined {
 
 export function getLoggedInUserId(): number | null {
 	try {
+		if (typeof window === "undefined") return null; // SSR guard
 		const raw = localStorage.getItem("eprofile_user");
 		if (!raw) return null;
 		const obj = JSON.parse(raw) as { user_id?: number; id?: number };
@@ -72,6 +75,17 @@ export function getLoggedInUserId(): number | null {
 	}
 }
 
+function toQuery(filters?: Record<string, string | number | boolean | undefined>, orderby?: string) {
+	const params = new URLSearchParams();
+	if (filters) {
+		Object.entries(filters).forEach(([k, v]) => {
+			if (v !== undefined && v !== null && v !== "") params.append(k, String(v));
+		});
+	}
+	if (orderby) params.append("orderby", orderby);
+	return params;
+}
+
 function compact<T extends Record<string, any>>(obj: T): T {
 	const out: any = {};
 	Object.entries(obj).forEach(([k, v]) => {
@@ -80,19 +94,65 @@ function compact<T extends Record<string, any>>(obj: T): T {
 	return out;
 }
 
-/* ========= Users – legacy (giữ nguyên để tương thích) ========= */
-/** LẤY TRANG 1 (cũ) – KHÔNG có meta phân trang trong kiểu trả về */
+export function fullName(u: Pick<UserDTO, "firstName" | "lastName" | "email">): string {
+	const ln = u.lastName?.trim() ?? "";
+	const fn = u.firstName?.trim() ?? "";
+	const byName = [ln, fn].filter(Boolean).join(" ").trim();
+	if (byName) return byName;
+	return u.email ? u.email.split("@")[0] : "Người dùng";
+}
+
+export function calcAge(birthday?: string): number | undefined {
+	if (!birthday) return undefined;
+	const d = new Date(birthday);
+	if (isNaN(+d)) return undefined;
+	const now = new Date();
+	let age = now.getFullYear() - d.getFullYear();
+	const m = now.getMonth() - d.getMonth();
+	if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+	return age;
+}
+
+export function extractRoleId(role?: UserDTO["role"]): number | undefined {
+	const r = role as any;
+	if (typeof r === "number") return r;
+	if (typeof r === "string") {
+		const n = Number(r);
+		return Number.isNaN(n) ? undefined : n;
+	}
+	if (r && typeof r === "object") {
+		const id = r.id ?? (typeof r === "object" ? (r as any).id : undefined);
+		const n = Number(id);
+		return Number.isNaN(n) ? undefined : n;
+	}
+	return undefined;
+}
+
+export type NormalizedGender = "Nam" | "Nữ" | "Khác" | "-";
+export function normalizeGender(input?: string | number | null): NormalizedGender {
+	if (input === undefined || input === null) return "-";
+	const v = String(input).toLowerCase().trim();
+	if (["nam", "male", "m", "1"].includes(v)) return "Nam";
+	if (["nữ", "nu", "female", "f", "0", "2"].includes(v)) return "Nữ";
+	return "Khác";
+}
+
+export type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
+export function normalizeSport(input?: string): SportCode {
+	const s = (input || "").toLowerCase().trim();
+	if (!s) return "";
+	if (s.includes("shoot") || s.includes("bắn súng") || s.includes("ban sung")) return "shooting";
+	if (s.includes("arch") || s.includes("bắn cung") || s.includes("ban cung")) return "archery";
+	if (s.includes("taek")) return "taekwondo";
+	if (s.includes("box")) return "boxing";
+	return "";
+}
+
 export async function listUsers(
 	filters?: Record<string, string | number | boolean | undefined>,
 	orderby?: string
 ): Promise<UserDTO[]> {
-	const params = new URLSearchParams();
-	if (filters) {
-		Object.entries(filters).forEach(([k, v]) => {
-			if (v !== undefined && v !== null && v !== "") params.append(k, String(v));
-		});
-	}
-	if (orderby) params.append("orderby", orderby);
+	const params = toQuery(filters, orderby);
 	const qs = params.toString();
 	const url = qs ? `/api/Users?${qs}` : "/api/Users";
 	const { data } = await api.get<ListResponse<UserDTO>>(url);
@@ -100,54 +160,46 @@ export async function listUsers(
 	return data.data;
 }
 
-/* ========= Users – phân trang chuẩn ========= */
 /**
  * Lấy 1 trang người dùng từ API (có meta total/totalpage).
  * @param page – số trang bắt đầu từ 1
  * @param filters – bộ lọc tùy ý
  * @param orderby – ví dụ: "id-asc" | "id-desc"
- * @param limit – nếu API hỗ trợ (ví dụ limit=10/25/1000)
+ * @param limit – nếu API hỗ trợ (ví dụ limit=10/25/100)
+ * @param signal – AbortSignal để hủy request khi đổi filter nhanh
  */
 export async function listUsersPage(
 	page = 1,
 	filters?: Record<string, string | number | boolean | undefined>,
 	orderby?: string,
-	limit?: number
+	limit = DEFAULT_PAGE_LIMIT,
+	signal?: AbortSignal
 ): Promise<PagedListResponse<UserDTO>> {
-	const params = new URLSearchParams();
-	if (filters) {
-		Object.entries(filters).forEach(([k, v]) => {
-			if (v !== undefined && v !== null && v !== "") params.append(k, String(v));
-		});
-	}
-	if (orderby) params.append("orderby", orderby);
-	if (limit !== undefined) params.append("limit", String(limit)); // nếu backend hỗ trợ
+	const params = toQuery(filters, orderby);
 	params.append("page", String(page));
+	if (limit !== undefined && limit !== null) params.append("limit", String(limit)); // nếu BE hỗ trợ
 
 	const qs = params.toString();
 	const url = qs ? `/api/Users?${qs}` : "/api/Users";
-	const { data } = await api.get<PagedListResponse<UserDTO>>(url);
+	const { data } = await api.get<PagedListResponse<UserDTO>>(url, { signal });
 	if (data.status !== "success") throw new Error(data.message || "List Users failed");
 	return data;
 }
 
 /**
  * Lấy toàn bộ người dùng bằng cách gọi từng trang rồi gộp lại.
- * Dùng cho client-side pagination hoặc export dữ liệu.
+ * Dùng cho export dữ liệu hoặc đồng bộ nền.
  */
 export async function listAllUsers(
 	filters?: Record<string, string | number | boolean | undefined>,
 	orderby?: string
 ): Promise<UserDTO[]> {
-	// gọi trang 1 để biết totalpage
-	const first = await listUsersPage(1, filters, orderby);
-	const totalpage = first.totalpage ?? 1;
-
-	// gom dữ liệu
+	const first = await listUsersPage(1, filters, orderby, DEFAULT_PAGE_LIMIT);
+	const totalpage = Math.max(1, first.totalpage ?? 1);
 	const out: UserDTO[] = [...first.data];
 
 	for (let p = 2; p <= totalpage; p += 1) {
-		const res = await listUsersPage(p, filters, orderby);
+		const res = await listUsersPage(p, filters, orderby, DEFAULT_PAGE_LIMIT);
 		out.push(...res.data);
 	}
 	return out;
@@ -160,10 +212,24 @@ export async function fetchUserByIdFromList(id: number): Promise<UserDTO | null>
 	return data.data.find((u) => u.id === id) ?? null;
 }
 
-export async function getUserById(id: number): Promise<UserDTO | null> {
-	const { data } = await api.get<ItemResponse<UserDTO>>(`/api/Users/${id}`);
-	if (data.status !== "success") return null;
-	return data.data;
+/** Cache nhẹ cho getUserById để giảm lặp request trong cùng màn hình */
+const _userCache = new Map<number, { at: number; data: UserDTO | null }>();
+
+export async function getUserById(
+	id: number,
+	opts?: { useCache?: boolean; signal?: AbortSignal }
+): Promise<UserDTO | null> {
+	const useCache = opts?.useCache !== false;
+	if (useCache) {
+		const hit = _userCache.get(id);
+		if (hit && Date.now() - hit.at < USER_CACHE_TTL_MS) return hit.data;
+	}
+
+	const { data } = await api.get<ItemResponse<UserDTO>>(`/api/Users/${id}`, { signal: opts?.signal });
+	const ok = data.status === "success";
+	const val = ok ? data.data : null;
+	if (useCache) _userCache.set(id, { at: Date.now(), data: val });
+	return val;
 }
 
 /* ========= Athletes ========= */

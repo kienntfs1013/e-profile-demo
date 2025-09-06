@@ -4,7 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
 	deleteCompetitionById,
-	listCompetitions,
+	listCompetitionsPage,
+	mapSportKeyToApi,
 	type CompetitionMasterDTO,
 } from "@/services/competitions-master.service";
 import Alert from "@mui/material/Alert";
@@ -37,10 +38,7 @@ import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 
 type SportKey = "all" | "shooting" | "archery" | "boxing" | "taekwondo";
 
-function applyPagination<T>(rows: T[], page: number, rowsPerPage: number): T[] {
-	return rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
-}
-
+/* ---------- small utils ---------- */
 function normalizeSportKey(apiText?: string): Exclude<SportKey, "all"> | "" {
 	const s = (apiText || "").toLowerCase();
 	if (s.includes("shoot") || s.includes("bắn súng") || s.includes("ban sung")) return "shooting";
@@ -49,7 +47,6 @@ function normalizeSportKey(apiText?: string): Exclude<SportKey, "all"> | "" {
 	if (s.includes("box")) return "boxing";
 	return "";
 }
-
 function fmtDate(d?: string) {
 	if (!d) return "-";
 	const dt = new Date(d);
@@ -58,6 +55,14 @@ function fmtDate(d?: string) {
 	const mm = String(dt.getMonth() + 1).padStart(2, "0");
 	const yyyy = dt.getFullYear();
 	return `${dd}/${mm}/${yyyy}`;
+}
+function useDebouncedValue<T>(value: T, delay = 350) {
+	const [v, setV] = React.useState(value);
+	React.useEffect(() => {
+		const t = setTimeout(() => setV(value), delay);
+		return () => clearTimeout(t);
+	}, [value, delay]);
+	return v;
 }
 
 type Row = {
@@ -73,25 +78,38 @@ type Row = {
 export default function CompetitionsPage(): React.JSX.Element {
 	const router = useRouter();
 
-	const [data, setData] = React.useState<Row[]>([]);
-	const [loading, setLoading] = React.useState(true);
-
-	const [q, setQ] = React.useState("");
-	const [sport, setSport] = React.useState<SportKey>("all");
-	const [page, setPage] = React.useState(0);
+	// server-side pagination state
+	const [page, setPage] = React.useState(0); // TablePagination is 0-based
 	const [rowsPerPage, setRowsPerPage] = React.useState(10);
 
+	// filters
+	const [q, setQ] = React.useState("");
+	const [sport, setSport] = React.useState<SportKey>("all");
+	const qDebounced = useDebouncedValue(q, 350);
+
+	// data
+	const [rows, setRows] = React.useState<Row[]>([]);
+	const [total, setTotal] = React.useState(0);
+	const [loading, setLoading] = React.useState(true);
+
+	// delete state
 	const [confirmItem, setConfirmItem] = React.useState<Row | null>(null);
 	const [deleting, setDeleting] = React.useState(false);
 	const [toast, setToast] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
 
+	// fetch data with abort on change
 	React.useEffect(() => {
-		let cancelled = false;
+		const controller = new AbortController();
 		(async () => {
 			try {
 				setLoading(true);
-				const list = await listCompetitions(undefined, "id-desc");
-				const rows: Row[] = list.map((c: CompetitionMasterDTO) => ({
+				const filters: Record<string, string> = {};
+				if (qDebounced.trim()) filters.q = qDebounced.trim(); // nếu backend hỗ trợ ?q=
+				if (sport !== "all") filters.sport_type = mapSportKeyToApi(sport);
+
+				const res = await listCompetitionsPage(page + 1, rowsPerPage, filters, "id-desc", controller.signal);
+
+				const mapped: Row[] = res.data.map((c: CompetitionMasterDTO) => ({
 					id: c.id,
 					name: c.competition_name || `Giải đấu #${c.id}`,
 					sport: normalizeSportKey(c.sport_type),
@@ -100,29 +118,21 @@ export default function CompetitionsPage(): React.JSX.Element {
 					start: c.start_date,
 					end: c.end_date,
 				}));
-				if (!cancelled) setData(rows);
-			} catch {
-				if (!cancelled) setData([]);
+
+				setRows(mapped);
+				setTotal(res.total ?? (res as any).totalCount ?? mapped.length); // fallback nếu API chưa trả total
+			} catch (e: any) {
+				if (e?.name !== "CanceledError" && e?.name !== "AbortError") {
+					console.error(e);
+					setRows([]);
+					setTotal(0);
+				}
 			} finally {
-				if (!cancelled) setLoading(false);
+				setLoading(false);
 			}
 		})();
-		return () => {
-			cancelled = true;
-		};
-	}, []);
-
-	const filtered = React.useMemo(() => {
-		const key = q.trim().toLowerCase();
-		return data.filter((r) => {
-			const okSport = sport === "all" ? true : r.sport === sport;
-			const haystack = [r.name, r.city, r.country].filter(Boolean).join(" ").toLowerCase();
-			const okQ = key ? haystack.includes(key) : true;
-			return okSport && okQ;
-		});
-	}, [data, sport, q]);
-
-	const rows = React.useMemo(() => applyPagination(filtered, page, rowsPerPage), [filtered, page, rowsPerPage]);
+		return () => controller.abort();
+	}, [page, rowsPerPage, qDebounced, sport]);
 
 	const goEdit = (id: number) => router.push(`/dashboard/competitions/update/${id}`);
 
@@ -132,8 +142,32 @@ export default function CompetitionsPage(): React.JSX.Element {
 			setDeleting(true);
 			await deleteCompetitionById(confirmItem.id);
 			setToast({ type: "success", message: "Đã xóa giải đấu" });
+
+			// refetch trang hiện tại
+			const controller = new AbortController();
+			const filters: Record<string, string> = {};
+			if (qDebounced.trim()) filters.q = qDebounced.trim();
+			if (sport !== "all") filters.sport_type = mapSportKeyToApi(sport);
+			const res = await listCompetitionsPage(page + 1, rowsPerPage, filters, "id-desc", controller.signal);
+
+			// Nếu xóa xong mà trang hiện tại trống (vd xóa bản ghi cuối cùng) → lùi 1 trang
+			if (res.data.length === 0 && page > 0) {
+				setPage((p) => p - 1);
+			} else {
+				const mapped: Row[] = res.data.map((c) => ({
+					id: c.id,
+					name: c.competition_name || `Giải đấu #${c.id}`,
+					sport: normalizeSportKey(c.sport_type),
+					city: c.city,
+					country: c.country,
+					start: c.start_date,
+					end: c.end_date,
+				}));
+				setRows(mapped);
+				setTotal(res.total ?? mapped.length);
+			}
+
 			setConfirmItem(null);
-			setData((prev) => prev.filter((x) => x.id !== confirmItem.id));
 		} catch (e: any) {
 			setToast({ type: "error", message: e?.response?.data?.message || e?.message || "Không thể xóa giải đấu" });
 		} finally {
@@ -143,6 +177,7 @@ export default function CompetitionsPage(): React.JSX.Element {
 
 	return (
 		<Stack spacing={3}>
+			{/* Filters */}
 			<Stack
 				direction={{ xs: "column", md: "row" }}
 				spacing={2}
@@ -195,6 +230,7 @@ export default function CompetitionsPage(): React.JSX.Element {
 				</Box>
 			</Stack>
 
+			{/* Table */}
 			<Paper variant="outlined" sx={{ overflow: "hidden", borderRadius: 2 }}>
 				<TableContainer>
 					<Table sx={{ minWidth: 900 }}>
@@ -217,14 +253,9 @@ export default function CompetitionsPage(): React.JSX.Element {
 										</Box>
 									</TableCell>
 								</TableRow>
-							) : (
+							) : rows.length > 0 ? (
 								rows.map((row) => (
-									<TableRow
-										key={row.id}
-										hover
-										onClick={() => goEdit(row.id)} // click cả dòng -> Edit (như mẫu)
-										sx={{ cursor: "pointer" }}
-									>
+									<TableRow key={row.id} hover onClick={() => goEdit(row.id)} sx={{ cursor: "pointer" }}>
 										<TableCell>
 											<Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
 												{row.name}
@@ -277,9 +308,7 @@ export default function CompetitionsPage(): React.JSX.Element {
 										</TableCell>
 									</TableRow>
 								))
-							)}
-
-							{!loading && rows.length === 0 && (
+							) : (
 								<TableRow>
 									<TableCell colSpan={5}>
 										<Box p={3} textAlign="center" color="text.secondary">
@@ -294,24 +323,26 @@ export default function CompetitionsPage(): React.JSX.Element {
 
 				<TablePagination
 					component="div"
-					count={filtered.length}
+					count={total}
 					page={page}
 					rowsPerPage={rowsPerPage}
-					onPageChange={(_, newPage) => setPage(newPage)}
+					onPageChange={(_, p) => setPage(p)}
 					onRowsPerPageChange={(e) => {
 						setRowsPerPage(parseInt(e.target.value, 10));
 						setPage(0);
 					}}
-					rowsPerPageOptions={[5, 10, 25]}
+					rowsPerPageOptions={[5, 10, 25, 50]}
 					labelRowsPerPage="Dòng / trang"
 				/>
 			</Paper>
 
+			{/* Delete dialog */}
 			<Dialog open={!!confirmItem} onClose={() => !deleting && setConfirmItem(null)} fullWidth maxWidth="xs">
 				<DialogTitle>Xác nhận xóa</DialogTitle>
 				<DialogContent>
 					<DialogContentText>
-						Bạn có chắc muốn xóa giải đấu{confirmItem ? ` “${confirmItem.name}” (Mã: ${confirmItem.id})` : ""}?
+						Bạn có chắc muốn xóa giải đấu
+						{confirmItem ? ` “${confirmItem.name}” (Mã: ${confirmItem.id})` : ""}?
 					</DialogContentText>
 				</DialogContent>
 				<DialogActions>

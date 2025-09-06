@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { listRoles, type RoleDTO } from "@/services/role.service";
-import { buildImageUrl, deleteUser, listAllUsers, type UserDTO } from "@/services/user.service";
+import { buildImageUrl, deleteUser, listUsersPage, type UserDTO } from "@/services/user.service";
 import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
@@ -34,9 +34,10 @@ import { PencilSimple } from "@phosphor-icons/react/dist/ssr/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 
-function applyPagination<T>(rows: T[], page: number, rowsPerPage: number): T[] {
-	return rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
-}
+const VISIBLE_COLS = 6; // Người dùng | Giới tính | Tuổi | Vai trò | Trạng thái | Thao tác
+const DEFAULT_ORDER = "id-asc";
+
+type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
 
 function fullName(u: UserDTO): string {
 	const ln = u.lastName?.trim() ?? "";
@@ -45,7 +46,6 @@ function fullName(u: UserDTO): string {
 	if (byName) return byName;
 	return u.email ? u.email.split("@")[0] : "Người dùng";
 }
-
 function calcAge(birthday?: string): number | undefined {
 	if (!birthday) return undefined;
 	const d = new Date(birthday);
@@ -56,8 +56,6 @@ function calcAge(birthday?: string): number | undefined {
 	if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
 	return age;
 }
-
-type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
 function normalizeSport(input?: string): SportCode {
 	const s = (input || "").toLowerCase().trim();
 	if (!s) return "";
@@ -67,19 +65,13 @@ function normalizeSport(input?: string): SportCode {
 	if (s.includes("box")) return "boxing";
 	return "";
 }
-
-type Row = {
-	id: string;
-	name: string;
-	avatar?: string;
-	status: "Đang hoạt động" | "Tạm ngưng";
-	age?: number;
-	sport?: SportCode;
-	roleId?: number;
-	roleName?: string;
-	gender?: "Nam" | "Nữ" | "Khác" | "-";
-};
-
+function normalizeGender(input?: string | number | null): "Nam" | "Nữ" | "Khác" | "-" {
+	if (input === undefined || input === null) return "-";
+	const v = String(input).toLowerCase().trim();
+	if (["nam", "male", "m", "1"].includes(v)) return "Nam";
+	if (["nữ", "nu", "female", "f", "0", "2"].includes(v)) return "Nữ";
+	return "Khác";
+}
 function extractRoleId(u: UserDTO): number | undefined {
 	const r: any = (u as any).role;
 	if (typeof r === "number") return r;
@@ -98,94 +90,131 @@ function extractRoleId(u: UserDTO): number | undefined {
 	return undefined;
 }
 
-function normalizeGender(input?: string | number | null): "Nam" | "Nữ" | "Khác" | "-" {
-	if (input === undefined || input === null) return "-";
-	const v = String(input).toLowerCase().trim();
-	if (["nam", "male", "m", "1"].includes(v)) return "Nam";
-	if (["nữ", "nu", "female", "f", "0", "2"].includes(v)) return "Nữ";
-	return "Khác";
-}
+type Row = {
+	id: string;
+	name: string;
+	avatar?: string;
+	status: "Đang hoạt động" | "Tạm ngưng";
+	age?: number;
+	sport?: SportCode;
+	roleId?: number;
+	roleName?: string;
+	gender?: "Nam" | "Nữ" | "Khác" | "-";
+};
 
 export default function UsersManagementPage(): React.JSX.Element {
 	const router = useRouter();
 
-	const [data, setData] = React.useState<Row[]>([]);
+	const [rows, setRows] = React.useState<Row[]>([]);
 	const [loading, setLoading] = React.useState(true);
 
+	// filters
 	const [search, setSearch] = React.useState("");
+	const searchDeferred = React.useDeferredValue(search);
 	const [status, setStatus] = React.useState<"all" | "active" | "paused">("all");
 	const [sport, setSport] = React.useState<"all" | SportCode>("all");
 	const [roleFilter, setRoleFilter] = React.useState<"all" | number>("all");
 
+	// roles
 	const [roles, setRoles] = React.useState<RoleDTO[]>([]);
 	const [roleMap, setRoleMap] = React.useState<Record<number, string>>({});
 
-	const [page, setPage] = React.useState(0);
-	const [rowsPerPage, setRowsPerPage] = React.useState(5);
+	// server pagination
+	const [page, setPage] = React.useState(0); // UI 0-based; API 1-based
+	const [rowsPerPage, setRowsPerPage] = React.useState(10);
+	const [total, setTotal] = React.useState(0);
 
 	const [confirmUser, setConfirmUser] = React.useState<Row | null>(null);
 	const [deleting, setDeleting] = React.useState(false);
 	const [toast, setToast] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
 
+	// chống race condition
+	const reqIdRef = React.useRef(0);
+
+	// load roles once
 	React.useEffect(() => {
 		let cancelled = false;
-
 		(async () => {
 			try {
-				setLoading(true);
-				const [roleList, users] = await Promise.all([
-					listRoles(undefined, "id-asc"),
-					listAllUsers(undefined, "id-asc"),
-				]);
-
+				const roleList = await listRoles(undefined, "id-asc");
 				if (!cancelled) {
 					setRoles(roleList);
 					setRoleMap(Object.fromEntries(roleList.map((r) => [r.id, r.name])));
 				}
-
-				const rows: Row[] = users.map((u) => {
-					const rid = extractRoleId(u);
-					return {
-						id: String(u.id),
-						name: fullName(u),
-						avatar: buildImageUrl(u.profile_picture_path),
-						status: u.is_active === 1 ? "Đang hoạt động" : "Tạm ngưng",
-						age: calcAge(u.birthday),
-						sport: normalizeSport(u.sport),
-						roleId: rid,
-						roleName: rid
-							? (Object.fromEntries(roleList.map((r) => [r.id, r.name])) as Record<number, string>)[rid]
-							: undefined,
-						gender: normalizeGender((u as any).gender),
-					};
-				});
-
-				if (!cancelled) setData(rows);
-			} catch (e) {
-				if (!cancelled) setData([]);
-			} finally {
-				if (!cancelled) setLoading(false);
+			} catch {
+				if (!cancelled) {
+					setRoles([]);
+					setRoleMap({});
+				}
 			}
 		})();
-
 		return () => {
 			cancelled = true;
 		};
 	}, []);
 
-	const filtered = React.useMemo(() => {
-		const q = search.trim().toLowerCase();
-		return data.filter((u) => {
-			const okName = q ? u.name.toLowerCase().includes(q) : true;
-			const okStatus =
-				status === "all" ? true : status === "active" ? u.status === "Đang hoạt động" : u.status === "Tạm ngưng";
-			const okSport = sport === "all" ? true : u.sport === sport;
-			const okRole = roleFilter === "all" ? true : u.roleId === roleFilter;
-			return okName && okStatus && okSport && okRole;
-		});
-	}, [data, search, status, sport, roleFilter]);
+	const mapToRow = React.useCallback(
+		(u: UserDTO): Row => {
+			const rid = extractRoleId(u);
+			return {
+				id: String(u.id),
+				name: fullName(u),
+				avatar: buildImageUrl(u.profile_picture_path),
+				status: u.is_active === 1 ? "Đang hoạt động" : "Tạm ngưng",
+				age: calcAge(u.birthday),
+				sport: normalizeSport(u.sport),
+				roleId: rid,
+				roleName: rid ? roleMap[rid] : undefined,
+				gender: normalizeGender((u as any).gender),
+			};
+		},
+		[roleMap]
+	);
 
-	const rows = React.useMemo(() => applyPagination(filtered, page, rowsPerPage), [filtered, page, rowsPerPage]);
+	const fetchPage = React.useCallback(
+		async (uiPage: number, pageSize: number) => {
+			const myReq = ++reqIdRef.current;
+			try {
+				setLoading(true);
+
+				// Đẩy được lên API: role, status (is_active), sport (nếu backend hỗ trợ).
+				const apiFilters: Record<string, any> = {};
+				if (roleFilter !== "all") apiFilters.role = roleFilter;
+				if (status !== "all") apiFilters.is_active = status === "active" ? 1 : 0;
+				if (sport !== "all") apiFilters.sport = sport;
+
+				const res = await listUsersPage(uiPage + 1, apiFilters, DEFAULT_ORDER, pageSize);
+				if (reqIdRef.current !== myReq) return;
+
+				// Tìm kiếm theo tên/email/phone thực hiện trong trang hiện tại (nhẹ, ít bản ghi)
+				const q = searchDeferred.trim().toLowerCase();
+				const pageFiltered = q
+					? res.data.filter((u) =>
+							[fullName(u), u.email, u.phoneNumber].filter(Boolean).join(" ").toLowerCase().includes(q)
+						)
+					: res.data;
+
+				setRows(pageFiltered.map(mapToRow));
+				setTotal(res.total ?? res.data.length);
+			} catch {
+				setRows([]);
+				setTotal(0);
+			} finally {
+				if (reqIdRef.current === myReq) setLoading(false);
+			}
+		},
+		[roleFilter, status, sport, searchDeferred, mapToRow]
+	);
+
+	// load khi thay đổi trang/kích thước hoặc filter/search
+	React.useEffect(() => {
+		fetchPage(page, rowsPerPage);
+	}, [fetchPage, page, rowsPerPage]);
+
+	// đổi filter -> về trang 0
+	React.useEffect(() => {
+		setPage(0);
+	}, [roleFilter, status, sport, searchDeferred]);
 
 	const goDetail = (id: string) => router.push(`/dashboard/customers/${id}`);
 
@@ -204,12 +233,14 @@ export default function UsersManagementPage(): React.JSX.Element {
 			const res = await deleteUser(idNum);
 			if (!res.ok) throw new Error(res.message || "Xóa người dùng thất bại");
 
-			setConfirmUser(null);
 			setToast({ type: "success", message: "Đã xóa người dùng thành công" });
+			setConfirmUser(null);
 
-			window.setTimeout(() => {
-				window.location.reload();
-			}, 2000);
+			// refetch trang hiện tại; nếu trống, lùi 1 trang
+			await fetchPage(page, rowsPerPage);
+			if (rows.length === 0 && page > 0) {
+				setPage((p) => Math.max(0, p - 1));
+			}
 		} catch (e: any) {
 			setToast({
 				type: "error",
@@ -219,8 +250,6 @@ export default function UsersManagementPage(): React.JSX.Element {
 			setDeleting(false);
 		}
 	};
-
-	const visibleColCount = 5; // VĐV | Tuổi | Vai trò | Trạng thái | Thao tác
 
 	return (
 		<Stack spacing={3}>
@@ -237,10 +266,7 @@ export default function UsersManagementPage(): React.JSX.Element {
 							size="small"
 							label="Tìm kiếm theo tên"
 							value={search}
-							onChange={(e) => {
-								setSearch(e.target.value);
-								setPage(0);
-							}}
+							onChange={(e) => setSearch(e.target.value)}
 						/>
 					</Box>
 
@@ -251,10 +277,7 @@ export default function UsersManagementPage(): React.JSX.Element {
 							size="small"
 							label="Bộ môn"
 							value={sport}
-							onChange={(e) => {
-								setSport(e.target.value as "all" | SportCode);
-								setPage(0);
-							}}
+							onChange={(e) => setSport(e.target.value as "all" | SportCode)}
 						>
 							<MenuItem value="all">Tất cả</MenuItem>
 							<MenuItem value="shooting">Bắn súng</MenuItem>
@@ -274,7 +297,6 @@ export default function UsersManagementPage(): React.JSX.Element {
 							onChange={(e) => {
 								const val = e.target.value;
 								setRoleFilter(val === "all" ? "all" : Number(val));
-								setPage(0);
 							}}
 						>
 							<MenuItem value="all">Tất cả</MenuItem>
@@ -293,10 +315,7 @@ export default function UsersManagementPage(): React.JSX.Element {
 							size="small"
 							label="Trạng thái"
 							value={status}
-							onChange={(e) => {
-								setStatus(e.target.value as "all" | "active" | "paused");
-								setPage(0);
-							}}
+							onChange={(e) => setStatus(e.target.value as "all" | "active" | "paused")}
 						>
 							<MenuItem value="all">Tất cả</MenuItem>
 							<MenuItem value="active">Đang hoạt động</MenuItem>
@@ -333,13 +352,13 @@ export default function UsersManagementPage(): React.JSX.Element {
 						<TableBody>
 							{loading ? (
 								<TableRow>
-									<TableCell colSpan={visibleColCount}>
+									<TableCell colSpan={VISIBLE_COLS}>
 										<Box p={3} textAlign="center" color="text.secondary">
 											Đang tải dữ liệu…
 										</Box>
 									</TableCell>
 								</TableRow>
-							) : (
+							) : rows.length > 0 ? (
 								rows.map((row) => (
 									<TableRow key={row.id} hover onClick={() => goDetail(row.id)} sx={{ cursor: "pointer" }}>
 										<TableCell>
@@ -393,11 +412,9 @@ export default function UsersManagementPage(): React.JSX.Element {
 										</TableCell>
 									</TableRow>
 								))
-							)}
-
-							{!loading && rows.length === 0 && (
+							) : (
 								<TableRow>
-									<TableCell colSpan={visibleColCount}>
+									<TableCell colSpan={VISIBLE_COLS}>
 										<Box p={3} textAlign="center" color="text.secondary">
 											Không có dữ liệu
 										</Box>
@@ -410,7 +427,7 @@ export default function UsersManagementPage(): React.JSX.Element {
 
 				<TablePagination
 					component="div"
-					count={filtered.length}
+					count={total}
 					page={page}
 					rowsPerPage={rowsPerPage}
 					onPageChange={(_, newPage) => setPage(newPage)}
@@ -418,7 +435,7 @@ export default function UsersManagementPage(): React.JSX.Element {
 						setRowsPerPage(parseInt(e.target.value, 10));
 						setPage(0);
 					}}
-					rowsPerPageOptions={[5, 10, 25]}
+					rowsPerPageOptions={[5, 10, 25, 50]}
 					labelRowsPerPage="Dòng / trang"
 				/>
 			</Paper>
