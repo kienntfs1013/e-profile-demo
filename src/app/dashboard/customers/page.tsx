@@ -21,7 +21,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { Eye } from "@phosphor-icons/react/dist/ssr/Eye";
 
-const VISIBLE_COLS = 6; // Vận động viên | Bộ môn | Quốc gia | Giới tính | Tuổi | Thao tác
+const VISIBLE_COLS = 6;
 const DEFAULT_ORDER = "id-asc";
 
 function isAthlete(u: UserDTO): boolean {
@@ -244,6 +244,9 @@ export default function CustomersPage(): React.JSX.Element {
 												<Box>
 													<Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
 														{row.name}
+													</Typography>
+													<Typography variant="caption" color="text.secondary">
+														{labelSport(row.sport || "")}
 													</Typography>
 												</Box>
 											</Stack>

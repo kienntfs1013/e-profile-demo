@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { buildImageUrl, deleteUser, listUsersPage, type UserDTO } from "@/services/user.service";
+import { buildImageUrl, deleteUser, getLoggedInUserId, listUsersPage, type UserDTO } from "@/services/user.service";
 import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
@@ -28,14 +28,13 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { Eye } from "@phosphor-icons/react/dist/ssr/Eye";
 import { PencilSimple } from "@phosphor-icons/react/dist/ssr/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 
 type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
 const DEFAULT_ORDER = "id-asc";
-const visibleColCount = 7; // VĐV | Giới tính | Tuổi | Email | SĐT | Trạng thái | Thao tác
+const visibleColCount = 7;
 
 function isAthlete(u: UserDTO): boolean {
 	const r = (u.role as any)?.toString?.().toLowerCase?.() ?? "";
@@ -74,6 +73,20 @@ function normalizeGender(input?: string | number | null): "Nam" | "Nữ" | "Khá
 	if (["nữ", "nu", "female", "f", "0", "2"].includes(v)) return "Nữ";
 	return "Khác";
 }
+function sportLabelVi(code?: SportCode): string {
+	switch (code) {
+		case "shooting":
+			return "Bắn súng";
+		case "archery":
+			return "Bắn cung";
+		case "taekwondo":
+			return "Taekwondo";
+		case "boxing":
+			return "Boxing";
+		default:
+			return "-";
+	}
+}
 
 type Row = {
 	id: string;
@@ -94,24 +107,19 @@ export default function AthletesManagementPage(): React.JSX.Element {
 	const [loading, setLoading] = React.useState(true);
 	const [toast, setToast] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
 
-	// bộ lọc
 	const [q, setQ] = React.useState("");
 	const [status, setStatus] = React.useState<"all" | "active" | "paused">("all");
 	const [sport, setSport] = React.useState<"all" | SportCode>("all");
 
-	// phân trang phía server
-	const [page, setPage] = React.useState(0); // 0-based UI
+	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(10);
 	const [total, setTotal] = React.useState(0);
 
-	// xóa
 	const [confirmUser, setConfirmUser] = React.useState<Row | null>(null);
 	const [deleting, setDeleting] = React.useState(false);
 
-	// debounce search
 	const qDeferred = React.useDeferredValue(q);
 
-	// request id để chống race condition
 	const reqIdRef = React.useRef(0);
 
 	const mapToRow = (u: UserDTO): Row => ({
@@ -132,20 +140,17 @@ export default function AthletesManagementPage(): React.JSX.Element {
 			try {
 				setLoading(true);
 
-				// filters gửi lên API: chỉ lấy vận động viên
 				const filters: Record<string, any> = { role: 1 };
 				if (status !== "all") filters.is_active = status === "active" ? 1 : 0;
 
-				// Nếu backend hỗ trợ lọc theo sport (tuỳ API), có thể map thêm:
-				// if (sport !== "all") filters.sport = sport; // cân nhắc bật nếu API hỗ trợ
-
-				// Tên thường không được backend hỗ trợ "contains" → ta sẽ filter client-side trên trang hiện tại.
 				const res = await listUsersPage(uiPage + 1, filters, DEFAULT_ORDER, pageSize);
 
-				if (reqIdRef.current !== myReq) return; // response cũ -> bỏ
+				if (reqIdRef.current !== myReq) return;
 
-				const onlyAthletes = res.data.filter(isAthlete);
-				// lọc theo sport + q trên *trang hiện tại* (tránh gọi toàn bộ dữ liệu)
+				const viewerId = getLoggedInUserId?.();
+				const base = viewerId != null ? res.data.filter((u) => Number(u.id) !== Number(viewerId)) : res.data;
+
+				const onlyAthletes = base.filter(isAthlete);
 				const clientFiltered = onlyAthletes.filter((u) => {
 					const okSport = sport === "all" ? true : normalizeSport(u.sport) === sport;
 					const okQ = qDeferred
@@ -159,7 +164,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 				});
 
 				setRows(clientFiltered.map(mapToRow));
-				setTotal(res.total ?? res.data.length); // có total từ API -> dùng, không có thì fallback
+				setTotal(res.total ?? res.data.length);
 			} catch (e: any) {
 				setRows([]);
 				setTotal(0);
@@ -170,12 +175,10 @@ export default function AthletesManagementPage(): React.JSX.Element {
 		[qDeferred, sport, status]
 	);
 
-	// load lần đầu và mỗi khi filter/pagination đổi
 	React.useEffect(() => {
 		fetchPage(page, rowsPerPage);
 	}, [fetchPage, page, rowsPerPage]);
 
-	// thay đổi filter -> quay về trang 0
 	React.useEffect(() => {
 		setPage(0);
 	}, [qDeferred, sport, status]);
@@ -204,7 +207,6 @@ export default function AthletesManagementPage(): React.JSX.Element {
 			setToast({ type: "success", message: "Đã xóa người dùng thành công" });
 			setConfirmUser(null);
 
-			// refetch nhẹ nhàng, không reload toàn trang
 			reloadCurrent();
 		} catch (e: any) {
 			setToast({
@@ -307,11 +309,9 @@ export default function AthletesManagementPage(): React.JSX.Element {
 													<Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
 														{row.name}
 													</Typography>
-													{row.email ? (
-														<Typography variant="caption" color="text.secondary">
-															{row.email}
-														</Typography>
-													) : null}
+													<Typography variant="caption" color="text.secondary">
+														{sportLabelVi(row.sport)}
+													</Typography>
 												</Box>
 											</Stack>
 										</TableCell>
@@ -341,7 +341,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 													</IconButton>
 												</Tooltip>
 												<Tooltip title="Xóa">
-													<IconButton size="small" color="error" onClick={() => onRequestDelete(row)}>
+													<IconButton size="small" color="error" onClick={() => setConfirmUser(row)}>
 														<Trash />
 													</IconButton>
 												</Tooltip>
@@ -377,7 +377,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 				/>
 			</Paper>
 
-			<Dialog open={!!confirmUser} onClose={onCancelDelete} fullWidth maxWidth="xs">
+			<Dialog open={!!confirmUser} onClose={() => (!deleting ? setConfirmUser(null) : null)} fullWidth maxWidth="xs">
 				<DialogTitle>Xác nhận xóa</DialogTitle>
 				<DialogContent>
 					<DialogContentText>
@@ -386,7 +386,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 					</DialogContentText>
 				</DialogContent>
 				<DialogActions>
-					<Button onClick={onCancelDelete} variant="outlined" disabled={deleting}>
+					<Button onClick={() => (!deleting ? setConfirmUser(null) : null)} variant="outlined" disabled={deleting}>
 						Hủy
 					</Button>
 					<Button onClick={onConfirmDelete} color="error" variant="contained" disabled={deleting}>

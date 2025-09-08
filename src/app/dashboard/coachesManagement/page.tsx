@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { buildImageUrl, deleteUser, listUsersPage, type UserDTO } from "@/services/user.service";
+import { buildImageUrl, deleteUser, getLoggedInUserId, listUsersPage, type UserDTO } from "@/services/user.service";
 import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
@@ -33,7 +33,7 @@ import { PencilSimple } from "@phosphor-icons/react/dist/ssr/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 
-const VISIBLE_COLS = 7; // Huấn luyện viên | Giới tính | Tuổi | Email | SĐT | Trạng thái | Thao tác
+const VISIBLE_COLS = 7;
 const DEFAULT_ORDER = "id-asc";
 
 type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
@@ -75,6 +75,20 @@ function normalizeGender(input?: string | number | null): "Nam" | "Nữ" | "Khá
 	if (["nữ", "nu", "female", "f", "0", "2"].includes(v)) return "Nữ";
 	return "Khác";
 }
+function sportLabelVi(code?: SportCode): string {
+	switch (code) {
+		case "shooting":
+			return "Bắn súng";
+		case "archery":
+			return "Bắn cung";
+		case "taekwondo":
+			return "Taekwondo";
+		case "boxing":
+			return "Boxing";
+		default:
+			return "-";
+	}
+}
 
 type Row = {
 	id: string;
@@ -98,7 +112,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 	const [status, setStatus] = React.useState<"all" | "active" | "paused">("all");
 	const [sport, setSport] = React.useState<"all" | SportCode>("all");
 
-	const [page, setPage] = React.useState(0); // UI 0-based
+	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(10);
 	const [total, setTotal] = React.useState(0);
 
@@ -132,9 +146,11 @@ export default function AthletesManagementPage(): React.JSX.Element {
 
 				if (reqIdRef.current !== myReq) return;
 
+				const myId = getLoggedInUserId?.();
 				const onlyCoaches = res.data.filter(isCoach);
+				const excludeMe = onlyCoaches.filter((u) => (myId ? Number(u.id) !== Number(myId) : true));
 
-				const filtered = onlyCoaches.filter((u) => {
+				const filtered = excludeMe.filter((u) => {
 					const okSport = sport === "all" ? true : normalizeSport(u.sport) === sport;
 					const okQ = searchDeferred
 						? [fullName(u), u.email, u.phoneNumber]
@@ -297,11 +313,9 @@ export default function AthletesManagementPage(): React.JSX.Element {
 													<Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
 														{row.name}
 													</Typography>
-													{row.email ? (
-														<Typography variant="caption" color="text.secondary">
-															{row.email}
-														</Typography>
-													) : null}
+													<Typography variant="caption" color="text.secondary">
+														{sportLabelVi(row.sport)}
+													</Typography>
 												</Box>
 											</Stack>
 										</TableCell>

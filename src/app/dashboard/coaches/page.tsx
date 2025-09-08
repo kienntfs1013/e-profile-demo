@@ -23,9 +23,8 @@ import { Eye } from "@phosphor-icons/react/dist/ssr/Eye";
 
 type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
 const DEFAULT_ORDER = "id-asc";
-const visibleColCount = 6; // HLV | Bộ môn | Quốc gia | Giới tính | Tuổi | Thao tác
+const visibleColCount = 5;
 
-/* ===== helpers ===== */
 function isCoach(u: UserDTO): boolean {
 	const r = (u.role as any)?.toString?.().toLowerCase?.() ?? "";
 	return r === "coach" || r === "huấn luyện viên" || r === "huan luyen vien" || r === "2";
@@ -250,6 +249,9 @@ export default function CustomersPage(): React.JSX.Element {
 												<Box>
 													<Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
 														{row.name}
+													</Typography>
+													<Typography variant="caption" color="text.secondary">
+														{labelSport(row.sport || "")}
 													</Typography>
 												</Box>
 											</Stack>

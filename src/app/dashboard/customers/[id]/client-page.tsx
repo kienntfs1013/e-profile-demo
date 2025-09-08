@@ -223,7 +223,6 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 		);
 	}
 
-	// 🔎 NEW: Chỉ khi user detail là VĐV mới cho phép hiển thị các tab (và các section khác General)
 	const detailIsAthlete = isAthleteRole(user.role);
 
 	return (

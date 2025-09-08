@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { listRoles, type RoleDTO } from "@/services/role.service";
-import { buildImageUrl, deleteUser, listUsersPage, type UserDTO } from "@/services/user.service";
+import { buildImageUrl, deleteUser, getLoggedInUserId, listUsersPage, type UserDTO } from "@/services/user.service";
 import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
@@ -65,6 +65,20 @@ function normalizeSport(input?: string): SportCode {
 	if (s.includes("box")) return "boxing";
 	return "";
 }
+function sportLabelVi(code?: SportCode): string {
+	switch (code) {
+		case "shooting":
+			return "Bắn súng";
+		case "archery":
+			return "Bắn cung";
+		case "taekwondo":
+			return "Taekwondo";
+		case "boxing":
+			return "Boxing";
+		default:
+			return "-";
+	}
+}
 function normalizeGender(input?: string | number | null): "Nam" | "Nữ" | "Khác" | "-" {
 	if (input === undefined || input === null) return "-";
 	const v = String(input).toLowerCase().trim();
@@ -117,7 +131,7 @@ export default function UsersManagementPage(): React.JSX.Element {
 	const [roles, setRoles] = React.useState<RoleDTO[]>([]);
 	const [roleMap, setRoleMap] = React.useState<Record<number, string>>({});
 
-	const [page, setPage] = React.useState(0); // UI 0-based; API 1-based
+	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(10);
 	const [total, setTotal] = React.useState(0);
 
@@ -126,6 +140,12 @@ export default function UsersManagementPage(): React.JSX.Element {
 	const [toast, setToast] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
 
 	const reqIdRef = React.useRef(0);
+	const currentUserIdRef = React.useRef<number | undefined>(undefined);
+
+	React.useEffect(() => {
+		const id = getLoggedInUserId?.();
+		currentUserIdRef.current = id === null ? undefined : id;
+	}, []);
 
 	React.useEffect(() => {
 		let cancelled = false;
@@ -180,15 +200,18 @@ export default function UsersManagementPage(): React.JSX.Element {
 				const res = await listUsersPage(uiPage + 1, apiFilters, DEFAULT_ORDER, pageSize);
 				if (reqIdRef.current !== myReq) return;
 
+				const currentId = currentUserIdRef.current;
+				const withoutSelf = currentId ? res.data.filter((u) => Number(u.id) !== Number(currentId)) : res.data;
+
 				const q = searchDeferred.trim().toLowerCase();
 				const pageFiltered = q
-					? res.data.filter((u) =>
+					? withoutSelf.filter((u) =>
 							[fullName(u), u.email, u.phoneNumber].filter(Boolean).join(" ").toLowerCase().includes(q)
 						)
-					: res.data;
+					: withoutSelf;
 
 				setRows(pageFiltered.map(mapToRow));
-				setTotal(res.total ?? res.data.length);
+				setTotal((res.total ?? res.data.length) - (currentId ? 1 : 0));
 			} catch {
 				setRows([]);
 				setTotal(0);
@@ -357,6 +380,9 @@ export default function UsersManagementPage(): React.JSX.Element {
 												<Box>
 													<Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
 														{row.name}
+													</Typography>
+													<Typography variant="caption" color="text.secondary">
+														{sportLabelVi(row.sport)}
 													</Typography>
 												</Box>
 											</Stack>

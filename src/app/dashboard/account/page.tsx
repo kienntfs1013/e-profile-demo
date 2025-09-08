@@ -206,7 +206,7 @@ export default function Page(): React.JSX.Element {
 				const avatar =
 					buildImageUrl(user.profile_picture_path) ||
 					buildImageUrl((athlete as AthleteDTO | null)?.athlete_profile_picture_path) ||
-					"/assets/noimagefound.png";
+					"https://upload.wikimedia.org/wikipedia/commons/a/a3/Image-not-found.png?20210521171500";
 
 				const roleInt = parseRoleToInt(user.role);
 
