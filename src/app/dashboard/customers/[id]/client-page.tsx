@@ -16,7 +16,6 @@ import { Avatar, Box, Button, MenuItem, Paper, Stack, TextField, Typography, use
 import { GeneralSection } from "@/components/customer-detail/general-section";
 import { SectionCard } from "@/components/customer-detail/section-card";
 
-/* ========= code-split các tab nặng ========= */
 const HealthSection = dynamic(
 	() => import("@/components/customer-detail/health-section").then((m) => m.HealthSection),
 	{ ssr: false, loading: () => <Box p={2}>Đang tải mục Sức khỏe…</Box> }
@@ -30,7 +29,6 @@ const AchievementSection = dynamic(
 	{ ssr: false, loading: () => <Box p={2}>Đang tải mục Thành tích…</Box> }
 );
 
-/* ========= helpers nhỏ ========= */
 const sportLabel = (v?: string) => {
 	if (!v) return "-";
 	const s = v.toLowerCase();
@@ -111,7 +109,6 @@ function calcAge(birthday?: string): number | undefined {
 	return age;
 }
 
-/* ========= Page ========= */
 export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 	const router = useRouter();
 	const isDesktop = useMediaQuery("(min-width:900px)", { noSsr: true });
@@ -122,14 +119,10 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 	const [viewerIsAthlete, setViewerIsAthlete] = React.useState(false);
 	const [isPending, startTransition] = React.useTransition();
 
-	/* ---- Preload 3 tab nặng khi rảnh (tăng cảm giác mượt) ---- */
 	React.useEffect(() => {
 		const run = () => {
-			// @ts-ignore
 			import("@/components/customer-detail/health-section");
-			// @ts-ignore
 			import("@/components/customer-detail/training-section");
-			// @ts-ignore
 			import("@/components/customer-detail/achievement-section");
 		};
 		if (typeof window !== "undefined") {
@@ -138,7 +131,6 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 		}
 	}, []);
 
-	/* ---- Tải dữ liệu song song + cleanup ---- */
 	React.useEffect(() => {
 		let mounted = true;
 
@@ -231,6 +223,9 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 		);
 	}
 
+	// 🔎 NEW: Chỉ khi user detail là VĐV mới cho phép hiển thị các tab (và các section khác General)
+	const detailIsAthlete = isAthleteRole(user.role);
+
 	return (
 		<Stack spacing={2} sx={{ px: { xs: 1.5, md: 2 }, pb: 3, width: "100%" }}>
 			<Paper
@@ -258,7 +253,9 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 				</Stack>
 			</Paper>
 
-			{!viewerIsAthlete &&
+			{/* Chỉ render UI chọn tab khi: user detail là VĐV *và* người xem KHÔNG phải VĐV (giữ nguyên quy tắc hiện tại) */}
+			{detailIsAthlete &&
+				!viewerIsAthlete &&
 				(isDesktop ? (
 					<Box sx={{ display: "flex", gap: 1, mb: 2, width: "100%" }}>
 						{TABS.map((t) => (
@@ -300,9 +297,11 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 
 			<SectionCard>
 				{tab === "general" && <GeneralSection id={user.id} />}
-				{!viewerIsAthlete && tab === "health" && <HealthSection user={user as any} />}
-				{!viewerIsAthlete && tab === "training" && <TrainingSection user={user as any} />}
-				{!viewerIsAthlete && tab === "achievement" && <AchievementSection user={user as any} />}
+
+				{detailIsAthlete && !viewerIsAthlete && tab === "health" && <HealthSection user={user as any} />}
+				{detailIsAthlete && !viewerIsAthlete && tab === "training" && <TrainingSection user={user as any} />}
+				{detailIsAthlete && !viewerIsAthlete && tab === "achievement" && <AchievementSection user={user as any} />}
+
 				{isPending && (
 					<Box mt={2} color="text.secondary">
 						Đang chuyển mục…
