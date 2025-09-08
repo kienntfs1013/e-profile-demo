@@ -89,20 +89,16 @@ export default function CustomersPage(): React.JSX.Element {
 	const [rows, setRows] = React.useState<Row[]>([]);
 	const [loading, setLoading] = React.useState(true);
 
-	// filter
 	const [search, setSearch] = React.useState("");
 	const [sport, setSport] = React.useState<"all" | SportCode>("all");
 	const [sortName, setSortName] = React.useState<"asc" | "desc">("asc");
 
-	// server pagination
-	const [page, setPage] = React.useState(0); // 0-based UI
+	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(10);
 	const [total, setTotal] = React.useState(0);
 
-	// debounce search (lọc trong trang hiện tại)
 	const searchDeferred = React.useDeferredValue(search);
 
-	// chống race condition
 	const reqIdRef = React.useRef(0);
 
 	const mapToRow = (u: UserDTO): Row => ({
@@ -123,10 +119,7 @@ export default function CustomersPage(): React.JSX.Element {
 			try {
 				setLoading(true);
 
-				// chỉ lấy HLV từ API
 				const filters: Record<string, any> = { role: 2 };
-				// Nếu backend hỗ trợ lọc sport thì có thể bật:
-				// if (sport !== "all") filters.sport = sport;
 
 				const res = await listUsersPage(uiPage + 1, filters, DEFAULT_ORDER, pageSize);
 
@@ -134,7 +127,6 @@ export default function CustomersPage(): React.JSX.Element {
 
 				const onlyCoaches = res.data.filter(isCoach);
 
-				// lọc trong trang (search + sport) + sort tên
 				const filtered = onlyCoaches.filter((u) => {
 					const okSport = sport === "all" ? true : normalizeSport(u.sport) === sport;
 					const okQ = searchDeferred
@@ -165,12 +157,10 @@ export default function CustomersPage(): React.JSX.Element {
 		[searchDeferred, sport, sortName]
 	);
 
-	// load mỗi khi filter/pagination đổi
 	React.useEffect(() => {
 		fetchPage(page, rowsPerPage);
 	}, [fetchPage, page, rowsPerPage]);
 
-	// đổi filter -> về trang 0
 	React.useEffect(() => {
 		setPage(0);
 	}, [searchDeferred, sport, sortName]);
@@ -239,7 +229,6 @@ export default function CustomersPage(): React.JSX.Element {
 								<TableCell>Quốc gia</TableCell>
 								<TableCell align="center">Giới tính</TableCell>
 								<TableCell align="center">Tuổi</TableCell>
-								<TableCell align="right">Thao tác</TableCell>
 							</TableRow>
 						</TableHead>
 
@@ -275,14 +264,6 @@ export default function CustomersPage(): React.JSX.Element {
 										<TableCell align="center">{row.gender ?? "-"}</TableCell>
 
 										<TableCell align="center">{row.age ?? "-"}</TableCell>
-
-										<TableCell align="right" onClick={(e) => e.stopPropagation()}>
-											<Tooltip title="Chi tiết">
-												<IconButton size="small" onClick={() => goDetail(row.id)}>
-													<Eye />
-												</IconButton>
-											</Tooltip>
-										</TableCell>
 									</TableRow>
 								))
 							) : (

@@ -383,11 +383,6 @@ export default function UsersManagementPage(): React.JSX.Element {
 
 										<TableCell align="right" onClick={(e) => e.stopPropagation()}>
 											<Stack direction="row" spacing={0.5} justifyContent="flex-end">
-												<Tooltip title="Chi tiết">
-													<IconButton size="small" onClick={() => goDetail(row.id)}>
-														<Eye />
-													</IconButton>
-												</Tooltip>
 												<Tooltip title="Sửa">
 													<IconButton size="small" onClick={() => router.push(`/dashboard/customers/update/${row.id}`)}>
 														<PencilSimple />

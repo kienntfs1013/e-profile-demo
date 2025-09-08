@@ -223,7 +223,6 @@ export default function CustomersPage(): React.JSX.Element {
 								<TableCell>Quốc gia</TableCell>
 								<TableCell align="center">Giới tính</TableCell>
 								<TableCell align="center">Tuổi</TableCell>
-								<TableCell align="right">Thao tác</TableCell>
 							</TableRow>
 						</TableHead>
 
@@ -259,14 +258,6 @@ export default function CustomersPage(): React.JSX.Element {
 										<TableCell align="center">{row.gender ?? "-"}</TableCell>
 
 										<TableCell align="center">{row.age ?? "-"}</TableCell>
-
-										<TableCell align="right" onClick={(e) => e.stopPropagation()}>
-											<Tooltip title="Chi tiết">
-												<IconButton size="small" onClick={() => goDetail(row.id)}>
-													<Eye />
-												</IconButton>
-											</Tooltip>
-										</TableCell>
 									</TableRow>
 								))
 							) : (

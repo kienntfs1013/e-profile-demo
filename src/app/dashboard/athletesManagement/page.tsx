@@ -226,13 +226,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 			>
 				<Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ flex: 1, minWidth: 0 }}>
 					<Box sx={{ flex: 1, minWidth: 240 }}>
-						<TextField
-							fullWidth
-							size="small"
-							label="Tìm kiếm"
-							value={q}
-							onChange={(e) => setQ(e.target.value)}
-						/>
+						<TextField fullWidth size="small" label="Tìm kiếm" value={q} onChange={(e) => setQ(e.target.value)} />
 					</Box>
 
 					<Box sx={{ width: { xs: "100%", sm: 220 } }}>
@@ -341,11 +335,6 @@ export default function AthletesManagementPage(): React.JSX.Element {
 
 										<TableCell align="right" onClick={(e) => e.stopPropagation()}>
 											<Stack direction="row" spacing={0.5} justifyContent="flex-end">
-												<Tooltip title="Chi tiết">
-													<IconButton size="small" onClick={() => goDetail(row.id)}>
-														<Eye />
-													</IconButton>
-												</Tooltip>
 												<Tooltip title="Sửa">
 													<IconButton size="small" onClick={() => router.push(`/dashboard/customers/update/${row.id}`)}>
 														<PencilSimple />

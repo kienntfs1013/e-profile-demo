@@ -98,15 +98,12 @@ export default function AthletesManagementPage(): React.JSX.Element {
 	const [status, setStatus] = React.useState<"all" | "active" | "paused">("all");
 	const [sport, setSport] = React.useState<"all" | SportCode>("all");
 
-	// server pagination
 	const [page, setPage] = React.useState(0); // UI 0-based
 	const [rowsPerPage, setRowsPerPage] = React.useState(10);
 	const [total, setTotal] = React.useState(0);
 
-	// debounce search để tránh gọi lại liên tục
 	const searchDeferred = React.useDeferredValue(search);
 
-	// chống race condition
 	const reqIdRef = React.useRef(0);
 
 	const mapToRow = (u: UserDTO): Row => ({
@@ -127,7 +124,6 @@ export default function AthletesManagementPage(): React.JSX.Element {
 			try {
 				setLoading(true);
 
-				// Lọc trên API: chỉ lấy HLV + trạng thái (nếu backend hỗ trợ)
 				const filters: Record<string, any> = { role: 2 };
 				if (status === "active") filters.is_active = 1;
 				else if (status === "paused") filters.is_active = 0;
@@ -136,10 +132,8 @@ export default function AthletesManagementPage(): React.JSX.Element {
 
 				if (reqIdRef.current !== myReq) return;
 
-				// Phòng khi backend trả cả role khác
 				const onlyCoaches = res.data.filter(isCoach);
 
-				// Lọc trong trang: sport + search
 				const filtered = onlyCoaches.filter((u) => {
 					const okSport = sport === "all" ? true : normalizeSport(u.sport) === sport;
 					const okQ = searchDeferred
@@ -153,7 +147,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 				});
 
 				setRows(filtered.map(mapToRow));
-				setTotal(res.total ?? res.data.length); // tổng từ API (nếu có)
+				setTotal(res.total ?? res.data.length);
 			} catch {
 				setRows([]);
 				setTotal(0);
@@ -168,7 +162,6 @@ export default function AthletesManagementPage(): React.JSX.Element {
 		fetchPage(page, rowsPerPage);
 	}, [fetchPage, page, rowsPerPage]);
 
-	// đổi filter -> về trang 0
 	React.useEffect(() => {
 		setPage(0);
 	}, [searchDeferred, sport, status]);
@@ -196,7 +189,6 @@ export default function AthletesManagementPage(): React.JSX.Element {
 			setToast({ type: "success", message: "Đã xóa người dùng thành công" });
 			setConfirmUser(null);
 
-			// tải lại trang hiện tại
 			fetchPage(page, rowsPerPage);
 		} catch (e: any) {
 			setToast({
@@ -337,11 +329,6 @@ export default function AthletesManagementPage(): React.JSX.Element {
 
 										<TableCell align="right" onClick={(e) => e.stopPropagation()}>
 											<Stack direction="row" spacing={0.5} justifyContent="flex-end">
-												<Tooltip title="Chi tiết">
-													<IconButton size="small" onClick={() => goDetail(row.id)}>
-														<Eye />
-													</IconButton>
-												</Tooltip>
 												<Tooltip title="Sửa">
 													<IconButton size="small" onClick={() => router.push(`/dashboard/customers/update/${row.id}`)}>
 														<PencilSimple />
