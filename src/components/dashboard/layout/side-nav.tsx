@@ -5,6 +5,11 @@ import RouterLink from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { fetchUserByIdFromList, getLoggedInUserId, getUserById } from "@/services/user.service";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
@@ -46,8 +51,16 @@ const filterItemsByRole = (items: NavItemConfig[], role: RoleView | null) => {
 		"achievement",
 		"competitions",
 	]);
-	const hideForManager = new Set(["health", "training", "achievement", "competitions", "usersManagement"]);
-	const hideForAdmin = new Set(["health", "training", "achievement", "competitions"]);
+	const hideForManager = new Set([
+		"health",
+		"training",
+		"achievement",
+		"competitions",
+		"usersManagement",
+		"coaches",
+		"customers",
+	]);
+	const hideForAdmin = new Set(["health", "training", "achievement", "competitions", "coaches", "customers"]);
 	const hide =
 		role === "athlete"
 			? hideForAthlete
@@ -161,19 +174,29 @@ function SideNavItem({ disabled, external, href, icon, matcher, pathname, title 
 	const router = useRouter();
 	const { signOut } = useUser();
 
+	const [confirmOpen, setConfirmOpen] = React.useState(false);
+	const openConfirm = () => setConfirmOpen(true);
+	const closeConfirm = () => setConfirmOpen(false);
+
+	const doLogout = async () => {
+		try {
+			await signOut();
+		} finally {
+			router.replace(paths.auth.signIn);
+		}
+	};
+
 	const handleClick = async (e: React.MouseEvent) => {
 		if (icon !== "logout") return;
 		e.preventDefault();
-		await signOut();
-		router.replace(paths.auth.signIn);
+		openConfirm();
 	};
 
 	const handleKeyDown = async (e: React.KeyboardEvent) => {
 		if (icon !== "logout") return;
 		if (e.key === "Enter" || e.key === " ") {
 			e.preventDefault();
-			await signOut();
-			router.replace(paths.auth.signIn);
+			openConfirm();
 		}
 	};
 
@@ -231,6 +254,21 @@ function SideNavItem({ disabled, external, href, icon, matcher, pathname, title 
 					</Typography>
 				</Box>
 			</Box>
+
+			{icon === "logout" && (
+				<Dialog open={confirmOpen} onClose={closeConfirm} aria-labelledby="logout-dialog-title" fullWidth maxWidth="xs">
+					<DialogTitle id="logout-dialog-title">Xác nhận đăng xuất</DialogTitle>
+					<DialogContent>Bạn có chắc chắn muốn đăng xuất khỏi hệ thống?</DialogContent>
+					<DialogActions>
+						<Button onClick={closeConfirm} variant="outlined">
+							Hủy
+						</Button>
+						<Button onClick={doLogout} variant="contained" color="primary" autoFocus>
+							Đăng xuất
+						</Button>
+					</DialogActions>
+				</Dialog>
+			)}
 		</li>
 	);
 }

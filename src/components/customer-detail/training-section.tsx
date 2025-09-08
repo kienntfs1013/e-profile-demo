@@ -309,7 +309,7 @@ export function TrainingSection({ user }: { user: User }) {
 			>
 				<TextField
 					fullWidth
-					label="Tìm kiếm (theo nội dung)"
+					label="Tìm kiếm"
 					value={search}
 					onChange={(e) => setSearch(e.target.value)}
 					size="small"

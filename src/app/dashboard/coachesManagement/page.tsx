@@ -221,7 +221,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 						<TextField
 							fullWidth
 							size="small"
-							label="Tìm kiếm (trong trang)"
+							label="Tìm kiếm"
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
 						/>

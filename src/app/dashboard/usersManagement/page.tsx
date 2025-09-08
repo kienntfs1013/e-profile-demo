@@ -34,7 +34,7 @@ import { PencilSimple } from "@phosphor-icons/react/dist/ssr/PencilSimple";
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 
-const VISIBLE_COLS = 6; // Người dùng | Giới tính | Tuổi | Vai trò | Trạng thái | Thao tác
+const VISIBLE_COLS = 6;
 const DEFAULT_ORDER = "id-asc";
 
 type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
@@ -108,18 +108,15 @@ export default function UsersManagementPage(): React.JSX.Element {
 	const [rows, setRows] = React.useState<Row[]>([]);
 	const [loading, setLoading] = React.useState(true);
 
-	// filters
 	const [search, setSearch] = React.useState("");
 	const searchDeferred = React.useDeferredValue(search);
 	const [status, setStatus] = React.useState<"all" | "active" | "paused">("all");
 	const [sport, setSport] = React.useState<"all" | SportCode>("all");
 	const [roleFilter, setRoleFilter] = React.useState<"all" | number>("all");
 
-	// roles
 	const [roles, setRoles] = React.useState<RoleDTO[]>([]);
 	const [roleMap, setRoleMap] = React.useState<Record<number, string>>({});
 
-	// server pagination
 	const [page, setPage] = React.useState(0); // UI 0-based; API 1-based
 	const [rowsPerPage, setRowsPerPage] = React.useState(10);
 	const [total, setTotal] = React.useState(0);
@@ -128,10 +125,8 @@ export default function UsersManagementPage(): React.JSX.Element {
 	const [deleting, setDeleting] = React.useState(false);
 	const [toast, setToast] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
 
-	// chống race condition
 	const reqIdRef = React.useRef(0);
 
-	// load roles once
 	React.useEffect(() => {
 		let cancelled = false;
 		(async () => {
@@ -177,7 +172,6 @@ export default function UsersManagementPage(): React.JSX.Element {
 			try {
 				setLoading(true);
 
-				// Đẩy được lên API: role, status (is_active), sport (nếu backend hỗ trợ).
 				const apiFilters: Record<string, any> = {};
 				if (roleFilter !== "all") apiFilters.role = roleFilter;
 				if (status !== "all") apiFilters.is_active = status === "active" ? 1 : 0;
@@ -186,7 +180,6 @@ export default function UsersManagementPage(): React.JSX.Element {
 				const res = await listUsersPage(uiPage + 1, apiFilters, DEFAULT_ORDER, pageSize);
 				if (reqIdRef.current !== myReq) return;
 
-				// Tìm kiếm theo tên/email/phone thực hiện trong trang hiện tại (nhẹ, ít bản ghi)
 				const q = searchDeferred.trim().toLowerCase();
 				const pageFiltered = q
 					? res.data.filter((u) =>
@@ -206,12 +199,10 @@ export default function UsersManagementPage(): React.JSX.Element {
 		[roleFilter, status, sport, searchDeferred, mapToRow]
 	);
 
-	// load khi thay đổi trang/kích thước hoặc filter/search
 	React.useEffect(() => {
 		fetchPage(page, rowsPerPage);
 	}, [fetchPage, page, rowsPerPage]);
 
-	// đổi filter -> về trang 0
 	React.useEffect(() => {
 		setPage(0);
 	}, [roleFilter, status, sport, searchDeferred]);
@@ -236,7 +227,6 @@ export default function UsersManagementPage(): React.JSX.Element {
 			setToast({ type: "success", message: "Đã xóa người dùng thành công" });
 			setConfirmUser(null);
 
-			// refetch trang hiện tại; nếu trống, lùi 1 trang
 			await fetchPage(page, rowsPerPage);
 			if (rows.length === 0 && page > 0) {
 				setPage((p) => Math.max(0, p - 1));
@@ -264,7 +254,7 @@ export default function UsersManagementPage(): React.JSX.Element {
 						<TextField
 							fullWidth
 							size="small"
-							label="Tìm kiếm theo tên"
+							label="Tìm kiếm"
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
 						/>

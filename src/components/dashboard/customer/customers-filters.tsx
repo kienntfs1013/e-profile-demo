@@ -10,7 +10,7 @@ export function CustomersFilters(): React.JSX.Element {
       <OutlinedInput
         defaultValue=""
         fullWidth
-        placeholder="Tìm kiếm theo tên"
+        placeholder="Tìm kiếm"
         startAdornment={
           <InputAdornment position="start">
             <MagnifyingGlassIcon fontSize="var(--icon-fontSize-md)" />

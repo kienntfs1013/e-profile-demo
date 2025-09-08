@@ -92,15 +92,12 @@ export default function CustomersPage(): React.JSX.Element {
 	const [sport, setSport] = React.useState<"all" | SportCode>("all");
 	const [sortName, setSortName] = React.useState<"asc" | "desc">("asc");
 
-	// server pagination
-	const [page, setPage] = React.useState(0); // UI 0-based; API 1-based
+	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(10);
 	const [total, setTotal] = React.useState(0);
 
-	// debounce tìm kiếm
 	const searchDeferred = React.useDeferredValue(search);
 
-	// chống race conditions giữa nhiều lần gọi
 	const reqIdRef = React.useRef(0);
 
 	const mapToRow = (u: UserDTO): Row => ({
@@ -121,15 +118,12 @@ export default function CustomersPage(): React.JSX.Element {
 			try {
 				setLoading(true);
 
-				// Lọc trên API: chỉ lấy VĐV (role=1). Có thể thêm các filter khác nếu backend hỗ trợ.
 				const res = await listUsersPage(uiPage + 1, { role: 1 }, DEFAULT_ORDER, pageSize);
 
 				if (reqIdRef.current !== myReq) return;
 
-				// Phòng khi backend trả cả role khác (data không sạch)
 				const onlyAthletes = res.data.filter(isAthlete);
 
-				// Lọc trong trang: sport và text query
 				const pageFiltered = onlyAthletes.filter((u) => {
 					const okSport = sport === "all" ? true : normalizeSport(u.sport) === sport;
 					const q = searchDeferred.trim().toLowerCase();
@@ -139,7 +133,6 @@ export default function CustomersPage(): React.JSX.Element {
 					return okSport && okQ;
 				});
 
-				// Sắp xếp theo tên trong trang hiện tại
 				pageFiltered.sort((a, b) =>
 					sortName === "asc"
 						? fullName(a).localeCompare(fullName(b), "vi", { sensitivity: "base" })
@@ -162,7 +155,6 @@ export default function CustomersPage(): React.JSX.Element {
 		fetchPage(page, rowsPerPage);
 	}, [fetchPage, page, rowsPerPage]);
 
-	// đổi filter -> về trang 0
 	React.useEffect(() => {
 		setPage(0);
 	}, [searchDeferred, sport, sortName]);
@@ -182,7 +174,7 @@ export default function CustomersPage(): React.JSX.Element {
 						<TextField
 							fullWidth
 							size="small"
-							label="Tìm kiếm theo tên"
+							label="Tìm kiếm"
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
 						/>

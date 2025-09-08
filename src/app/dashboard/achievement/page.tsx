@@ -75,9 +75,7 @@ function parseResult(v?: string) {
 	return v;
 }
 
-// === helpers cho lọc/sắp xếp ===
 function getWhen(r: any): string {
-	// Ưu tiên recorded_at rồi đến created_at (đều dạng ISO string)
 	return (r?.recorded_at as string) || (r?.created_at as string) || "";
 }
 
@@ -101,7 +99,6 @@ export default function Page() {
 	const [athleteId, setAthleteId] = React.useState<number | undefined>(undefined);
 	const [sportKey, setSportKey] = React.useState<SportKey | "">("");
 
-	// 1) Lấy user nhanh gọn bằng getUserById (tránh fetch toàn bộ list)
 	React.useEffect(() => {
 		let cancelled = false;
 		(async () => {
@@ -127,7 +124,6 @@ export default function Page() {
 		};
 	}, []);
 
-	// 2) Chỉ fetch dữ liệu cho môn đang xem
 	React.useEffect(() => {
 		let cancelled = false;
 		async function load() {
@@ -157,12 +153,10 @@ export default function Page() {
 		};
 	}, [athleteId, sportKey]);
 
-	// reset trang khi thay đổi filter
 	React.useEffect(() => {
 		setPage(0);
 	}, [sportKey, searchDeferred, sort, date]);
 
-	// Chỉ xử lý lọc/sắp xếp cho dataset của môn hiện tại (giảm compute)
 	const activeData = React.useMemo<Row[]>(() => {
 		if (sportKey === "archery") return arch;
 		if (sportKey === "shooting") return shoot;
@@ -176,30 +170,24 @@ export default function Page() {
 	const filteredSorted = React.useMemo(() => {
 		if (!activeData.length) return [] as Row[];
 
-		// lọc theo ngày (nếu có)
 		const byDate = dateObj
 			? activeData.filter((r: any) => {
 					const when = getWhen(r);
 					if (!when) return false;
-					// so sánh theo ngày (YYYY-MM-DD)
 					return dayjs(when).isSame(dateObj, "day");
 				})
 			: activeData;
 
-		// sắp xếp theo thời gian (recorded_at/created_at)
 		const bySort = [...byDate].sort((a: any, b: any) => {
 			const da = getWhen(a);
 			const db = getWhen(b);
-			// ISO string so sánh chuỗi OK nếu cùng định dạng
 			return sort === "newest" ? db.localeCompare(da) : da.localeCompare(db);
 		});
 
-		// tìm kiếm nội dung (deferred để debounce)
 		const q = searchDeferred.trim().toLowerCase();
 		if (!q) return bySort;
 
 		return bySort.filter((r) => {
-			// Tối ưu: chỉ join vài trường phổ biến; nếu cần sâu hơn dùng JSON.stringify
 			const buf = [
 				(r as any).competition_id,
 				(r as any).medal_won,
@@ -324,7 +312,7 @@ export default function Page() {
 			>
 				<TextField
 					fullWidth
-					label="Tìm kiếm (theo nội dung)"
+					label="Tìm kiếm"
 					value={search}
 					onChange={(e) => setSearch(e.target.value)}
 					size="small"

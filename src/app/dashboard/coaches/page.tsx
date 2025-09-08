@@ -190,7 +190,7 @@ export default function CustomersPage(): React.JSX.Element {
 						<TextField
 							fullWidth
 							size="small"
-							label="Tìm kiếm (trong trang)"
+							label="Tìm kiếm"
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
 						/>
