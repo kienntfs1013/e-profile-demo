@@ -1,10 +1,8 @@
-// src/services/practice.service.ts
 import { api } from "@/lib/api/client";
 
 type ListResponse<T> = { status: "success" | "error"; message?: string; data: T[] };
 type MutateResponse<T = unknown> = { status: "success" | "error"; message?: string; data?: T };
 
-// ===== DTOs =====
 export type TaekwondoPracticeDTO = {
 	id: number;
 	athlete_id: number;
@@ -13,7 +11,7 @@ export type TaekwondoPracticeDTO = {
 	drills_practiced?: string;
 	sparring_duration?: number | string;
 	fitness_exercises?: string;
-	notes?: string;
+	comments?: string;
 	created_at?: string;
 };
 export type ShootingPracticeDTO = {
@@ -26,7 +24,7 @@ export type ShootingPracticeDTO = {
 	shots_fired?: number | string;
 	shots_hit?: number | string;
 	accuracy?: number | string;
-	notes?: string;
+	comments?: string;
 	created_at?: string;
 };
 export type BoxingPracticeDTO = {
@@ -38,7 +36,7 @@ export type BoxingPracticeDTO = {
 	defense_success_rate?: number | string;
 	footwork_score?: number | string;
 	sparring_partner?: string;
-	notes?: string;
+	comments?: string;
 	created_at?: string;
 };
 export type ArcheryPracticeDTO = {
@@ -54,7 +52,6 @@ export type ArcheryPracticeDTO = {
 	created_at?: string;
 };
 
-// ===== Helpers =====
 export type PagedListResponse<T> = {
 	status?: "success" | "error";
 	message?: string;
@@ -74,7 +71,6 @@ function toQuery(filters?: Record<string, string | number | boolean | undefined>
 	return params.toString();
 }
 
-// ========== BẢN CŨ (giữ nguyên) ==========
 export async function listTaekwondoPractices(
 	filters?: Record<string, any>,
 	orderby?: string
@@ -135,7 +131,6 @@ export async function listArcheryPracticesByAthlete(athlete_id: number, orderby?
 	return listArcheryPractices({ athlete_id }, orderby);
 }
 
-// ====== Thêm: LẤY 1 TRANG (server-side pagination) ======
 async function listPracticePage<T>(
 	endpoint: "/api/Taekwondo_Practice" | "/api/Shooting_Practice" | "/api/Boxing_Practice" | "/api/Archery_Practice",
 	page = 1,
@@ -158,7 +153,6 @@ async function listPracticePage<T>(
 	return { ...data, data: data.data ?? ([] as T[]) };
 }
 
-// Convenience wrappers (by athlete)
 export function listTaekwondoPracticesPageByAthlete(
 	athlete_id: number,
 	page = 1,
@@ -228,7 +222,6 @@ export function listArcheryPracticesPageByAthlete(
 	);
 }
 
-// ====== Mutations (giữ nguyên) ======
 export async function addTaekwondoPractice(payload: Omit<TaekwondoPracticeDTO, "id">) {
 	const { id: _, ...body } = payload as any;
 	const { data } = await api.post<MutateResponse<TaekwondoPracticeDTO>>(`/api/Taekwondo_Practice`, body);

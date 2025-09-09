@@ -233,7 +233,6 @@ export default function Page() {
 				<Table sx={{ minWidth: 1100 }}>
 					<TableHead>
 						<TableRow>
-							<TableCell>Mã</TableCell>
 							<TableCell>Giải đấu</TableCell>
 							<TableCell>Huy chương</TableCell>
 							<TableCell>Hạng</TableCell>
@@ -257,7 +256,6 @@ export default function Page() {
 								const when = showRecordedAt ? r.recorded_at || r.created_at : r.created_at;
 								return (
 									<TableRow key={r.id} hover>
-										<TableCell>{r.id}</TableCell>
 										<TableCell>{r.competition_id ?? "—"}</TableCell>
 										<TableCell>{r.medal_won ?? "—"}</TableCell>
 										<TableCell>{r.final_rank != null ? <Chip size="small" label={r.final_rank} /> : "—"}</TableCell>

@@ -3,6 +3,16 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
+	listArcheryPerformanceAssessmentsPageByAthlete,
+	listBoxingPerformanceAssessmentsPageByAthlete,
+	listShootingPerformanceAssessmentsPageByAthlete,
+	listTaekwondoPerformanceAssessmentsPageByAthlete,
+	type ArcheryPerformanceAssessmentDTO,
+	type BoxingPerformanceAssessmentDTO,
+	type ShootingPerformanceAssessmentDTO,
+	type TaekwondoPerformanceAssessmentDTO,
+} from "@/services/evaluation.service";
+import {
 	listArcheryPracticesPageByAthlete,
 	listBoxingPracticesPageByAthlete,
 	listShootingPracticesPageByAthlete,
@@ -70,7 +80,6 @@ export default function Page(): React.JSX.Element {
 	const [date, setDate] = React.useState<string>(dayjs().format("YYYY-MM-DD"));
 	const [search, setSearch] = React.useState<string>("");
 
-	// debounce để không spam API
 	const debSearch = useDebouncedValue(search, 350);
 	const debDate = useDebouncedValue(date, 350);
 
@@ -78,13 +87,22 @@ export default function Page(): React.JSX.Element {
 	const [total, setTotal] = React.useState(0);
 	const [loading, setLoading] = React.useState(false);
 
-	const [page, setPage] = React.useState(0); // 0-based
+	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(5);
 
 	const [athleteId, setAthleteId] = React.useState<number | undefined>(undefined);
 	const [sportKey, setSportKey] = React.useState<"taekwondo" | "shooting" | "boxing" | "archery" | "">("");
 
-	// Lấy user nhanh: ưu tiên getUserById, fallback list
+	const [evalSort, setEvalSort] = React.useState<"newest" | "oldest">("newest");
+	const [evalDate, setEvalDate] = React.useState<string>("");
+	const [evalSearch, setEvalSearch] = React.useState<string>("");
+	const debEvalSearch = useDebouncedValue(evalSearch, 350);
+	const debEvalDate = useDebouncedValue(evalDate, 350);
+	const [evalRows, setEvalRows] = React.useState<any[]>([]);
+	const [evalTotal, setEvalTotal] = React.useState(0);
+	const [evalPage, setEvalPage] = React.useState(0);
+	const [evalRowsPerPage, setEvalRowsPerPage] = React.useState(5);
+
 	React.useEffect(() => {
 		let cancelled = false;
 		(async () => {
@@ -109,12 +127,10 @@ export default function Page(): React.JSX.Element {
 		};
 	}, []);
 
-	// Reset trang khi đổi filter
 	React.useEffect(() => {
 		setPage(0);
 	}, [sportKey, debSearch, debDate, sort]);
 
-	// Fetch 1 trang từ server + hủy request cũ
 	React.useEffect(() => {
 		if (!athleteId || !sportKey) return;
 		const controller = new AbortController();
@@ -123,10 +139,9 @@ export default function Page(): React.JSX.Element {
 			try {
 				setLoading(true);
 
-				// Backend của bạn có thể chưa hỗ trợ q / session_date. Cứ gửi, nếu chưa hỗ trợ sẽ bị bỏ qua.
 				const extraFilters: Record<string, string> = {};
 				if (debSearch.trim()) extraFilters.q = debSearch.trim();
-				if (debDate) extraFilters.session_date = debDate; // với Boxing không có field này → server sẽ bỏ qua
+				if (debDate) extraFilters.session_date = debDate;
 
 				const orderby = sort === "newest" ? "id-desc" : "id-asc";
 				const p = page + 1;
@@ -170,10 +185,9 @@ export default function Page(): React.JSX.Element {
 					);
 
 				setRows(res.data);
-				setTotal(res.total ?? res.data.length); // fallback nếu API chưa trả total
+				setTotal(res.total ?? res.data.length);
 			} catch (e: any) {
 				if (e?.name !== "CanceledError" && e?.name !== "AbortError") {
-					console.error(e);
 					setRows([]);
 					setTotal(0);
 				}
@@ -185,13 +199,182 @@ export default function Page(): React.JSX.Element {
 		return () => controller.abort();
 	}, [athleteId, sportKey, page, rowsPerPage, debSearch, debDate, sort]);
 
-	const handleAdd = () => {
-		if (athleteId && sportKey) router.push(`/dashboard/customers/training/${sportKey}/add?athlete=${athleteId}`);
-	};
+	React.useEffect(() => {
+		setEvalPage(0);
+	}, [sportKey, debEvalSearch, debEvalDate, evalSort]);
 
-	// === Render theo môn (giữ UI như hiện tại) ===
+	React.useEffect(() => {
+		if (!athleteId || !sportKey) return;
+		const controller = new AbortController();
+
+		(async () => {
+			try {
+				setLoading(true);
+
+				const extra: Record<string, string> = {};
+				if (debEvalSearch.trim()) extra.q = debEvalSearch.trim();
+				if (debEvalDate) extra.date = debEvalDate;
+
+				const orderby = evalSort === "newest" ? "id-desc" : "id-asc";
+				const p = evalPage + 1;
+
+				let res;
+				if (sportKey === "taekwondo") {
+					res = await listTaekwondoPerformanceAssessmentsPageByAthlete(
+						athleteId,
+						p,
+						evalRowsPerPage,
+						orderby,
+						extra,
+						controller.signal
+					);
+				} else if (sportKey === "shooting") {
+					res = await listShootingPerformanceAssessmentsPageByAthlete(
+						athleteId,
+						p,
+						evalRowsPerPage,
+						orderby,
+						extra,
+						controller.signal
+					);
+				} else if (sportKey === "boxing") {
+					res = await listBoxingPerformanceAssessmentsPageByAthlete(
+						athleteId,
+						p,
+						evalRowsPerPage,
+						orderby,
+						extra,
+						controller.signal
+					);
+				} else {
+					res = await listArcheryPerformanceAssessmentsPageByAthlete(
+						athleteId,
+						p,
+						evalRowsPerPage,
+						orderby,
+						extra,
+						controller.signal
+					);
+				}
+
+				setEvalRows(res.data);
+				setEvalTotal(res.total ?? res.data.length);
+			} catch (e: any) {
+				if (e?.name !== "CanceledError" && e?.name !== "AbortError") {
+					setEvalRows([]);
+					setEvalTotal(0);
+				}
+			} finally {
+				setLoading(false);
+			}
+		})();
+
+		return () => controller.abort();
+	}, [athleteId, sportKey, evalPage, evalRowsPerPage, debEvalSearch, debEvalDate, evalSort]);
+
 	return (
 		<Stack spacing={3}>
+			{sportKey ? (
+				<>
+					<Stack
+						direction="row"
+						spacing={2}
+						alignItems="center"
+						sx={{ width: "100%", flexWrap: { xs: "wrap", md: "nowrap" }, "& > *": { height: 40 } }}
+					>
+						<TextField
+							fullWidth
+							label="Tìm kiếm đánh giá"
+							value={evalSearch}
+							onChange={(e) => setEvalSearch(e.target.value)}
+							size="small"
+							sx={{ flex: "1 1 auto", minWidth: 240 }}
+						/>
+						<TextField
+							type="date"
+							label="Ngày đánh giá"
+							value={evalDate}
+							onChange={(e) => setEvalDate(e.target.value)}
+							InputLabelProps={{ shrink: true }}
+							size="small"
+							sx={{ width: { xs: "100%", md: 220 }, flex: { xs: "1 1 220px", md: "0 0 220px" } }}
+						/>
+						<Button
+							variant="outlined"
+							size="small"
+							onClick={() => setEvalDate("")}
+							sx={{ flex: { xs: "0 0 auto", md: "0 0 110px" }, px: 2 }}
+						>
+							Xóa ngày
+						</Button>
+						<TextField
+							select
+							label="Sắp xếp thời gian"
+							value={evalSort}
+							onChange={(e) => setEvalSort(e.target.value as any)}
+							size="small"
+							sx={{ width: { xs: "100%", md: 200 }, flex: { xs: "1 1 200px", md: "0 0 200px" } }}
+						>
+							<MenuItem value="newest">Mới nhất</MenuItem>
+							<MenuItem value="oldest">Cũ nhất</MenuItem>
+						</TextField>
+					</Stack>
+
+					<PracticeTableCard title="Đánh giá của huấn luyện viên">
+						<Table sx={{ minWidth: 980 }}>
+							<TableHead>
+								<TableRow>
+									<TableCell>Ngày đánh giá</TableCell>
+									<TableCell>Điểm</TableCell>
+									<TableCell>Nội dung</TableCell>
+									<TableCell>Ngày tạo</TableCell>
+								</TableRow>
+							</TableHead>
+							<TableBody>
+								{(loading
+									? []
+									: (evalRows as (
+											| TaekwondoPerformanceAssessmentDTO
+											| ShootingPerformanceAssessmentDTO
+											| BoxingPerformanceAssessmentDTO
+											| ArcheryPerformanceAssessmentDTO
+										)[])
+								).map((r: any) => (
+									<TableRow key={r.id} hover>
+										<TableCell>{r.date ? dayjs(r.date).format("DD/MM/YYYY") : "-"}</TableCell>
+										<TableCell>{r.score ?? "-"}</TableCell>
+										<TableCell sx={{ maxWidth: 520 }}>{r.comment ?? r.comments ?? "-"}</TableCell>
+										<TableCell>{r.created_at ? dayjs(r.created_at).format("DD/MM/YYYY") : "-"}</TableCell>
+									</TableRow>
+								))}
+								{!loading && evalRows.length === 0 && (
+									<TableRow>
+										<TableCell colSpan={5}>
+											<Box p={2} textAlign="center" color="text.secondary">
+												Không có dữ liệu
+											</Box>
+										</TableCell>
+									</TableRow>
+								)}
+							</TableBody>
+						</Table>
+						<TablePagination
+							component="div"
+							count={evalTotal}
+							page={evalPage}
+							rowsPerPage={evalRowsPerPage}
+							onPageChange={(_, p) => setEvalPage(p)}
+							onRowsPerPageChange={(e) => {
+								setEvalRowsPerPage(parseInt(e.target.value, 10));
+								setEvalPage(0);
+							}}
+							rowsPerPageOptions={[5, 10, 25]}
+							labelRowsPerPage="Dòng / trang"
+						/>
+					</PracticeTableCard>
+				</>
+			) : null}
+
 			<Stack
 				direction="row"
 				spacing={2}
@@ -236,20 +419,11 @@ export default function Page(): React.JSX.Element {
 				</TextField>
 			</Stack>
 
-			{/* Taekwondo */}
 			{sportKey === "taekwondo" && (
-				<PracticeTableCard
-					title="Taekwondo — Buổi tập"
-					header={
-						<Button onClick={handleAdd} size="small" variant="contained">
-							Thêm mới
-						</Button>
-					}
-				>
+				<PracticeTableCard title="Taekwondo — Buổi tập">
 					<Table sx={{ minWidth: 980 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Mã</TableCell>
 								<TableCell>Ngày tập</TableCell>
 								<TableCell>Kỹ thuật</TableCell>
 								<TableCell>Drills</TableCell>
@@ -261,13 +435,12 @@ export default function Page(): React.JSX.Element {
 						<TableBody>
 							{(loading ? [] : (rows as TaekwondoPracticeDTO[])).map((r) => (
 								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
 									<TableCell>{r.technique || "-"}</TableCell>
 									<TableCell>{r.drills_practiced || "-"}</TableCell>
 									<TableCell>{r.sparring_duration ?? "-"}</TableCell>
 									<TableCell>{r.fitness_exercises || "-"}</TableCell>
-									<TableCell>{r.notes || "-"}</TableCell>
+									<TableCell>{r.comments || "-"}</TableCell>
 								</TableRow>
 							))}
 							{!loading && rows.length === 0 && (
@@ -297,20 +470,11 @@ export default function Page(): React.JSX.Element {
 				</PracticeTableCard>
 			)}
 
-			{/* Shooting */}
 			{sportKey === "shooting" && (
-				<PracticeTableCard
-					title="Bắn súng — Buổi tập"
-					header={
-						<Button onClick={handleAdd} size="small" variant="contained">
-							Thêm mới
-						</Button>
-					}
-				>
+				<PracticeTableCard title="Bắn súng — Buổi tập">
 					<Table sx={{ minWidth: 1180 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Mã</TableCell>
 								<TableCell>Ngày tập</TableCell>
 								<TableCell>Loại súng</TableCell>
 								<TableCell>Cự ly</TableCell>
@@ -324,7 +488,6 @@ export default function Page(): React.JSX.Element {
 						<TableBody>
 							{(loading ? [] : (rows as ShootingPracticeDTO[])).map((r) => (
 								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
 									<TableCell>{r.weapon_type || "-"}</TableCell>
 									<TableCell>{r.distance ?? "-"}</TableCell>
@@ -332,7 +495,7 @@ export default function Page(): React.JSX.Element {
 									<TableCell>{r.shots_fired ?? "-"}</TableCell>
 									<TableCell>{r.shots_hit ?? "-"}</TableCell>
 									<TableCell>{r.accuracy ?? "-"}</TableCell>
-									<TableCell>{r.notes || "-"}</TableCell>
+									<TableCell>{r.comments || "-"}</TableCell>
 								</TableRow>
 							))}
 							{!loading && rows.length === 0 && (
@@ -362,20 +525,11 @@ export default function Page(): React.JSX.Element {
 				</PracticeTableCard>
 			)}
 
-			{/* Boxing */}
 			{sportKey === "boxing" && (
-				<PracticeTableCard
-					title="Boxing — Buổi tập"
-					header={
-						<Button onClick={handleAdd} size="small" variant="contained">
-							Thêm mới
-						</Button>
-					}
-				>
+				<PracticeTableCard title="Boxing — Buổi tập">
 					<Table sx={{ minWidth: 1180 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Mã</TableCell>
 								<TableCell>Hiệp</TableCell>
 								<TableCell>Cú ra đòn</TableCell>
 								<TableCell>Đòn trúng</TableCell>
@@ -389,14 +543,13 @@ export default function Page(): React.JSX.Element {
 						<TableBody>
 							{(loading ? [] : (rows as BoxingPracticeDTO[])).map((r) => (
 								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.round_number ?? "-"}</TableCell>
 									<TableCell>{r.punches_thrown ?? "-"}</TableCell>
 									<TableCell>{r.punches_landed ?? "-"}</TableCell>
 									<TableCell>{r.defense_success_rate ?? "-"}</TableCell>
 									<TableCell>{r.footwork_score ?? "-"}</TableCell>
 									<TableCell>{r.sparring_partner || "-"}</TableCell>
-									<TableCell>{r.notes || "-"}</TableCell>
+									<TableCell>{r.comments || "-"}</TableCell>
 									<TableCell>{r.created_at ? dayjs(r.created_at).format("DD/MM/YYYY") : "-"}</TableCell>
 								</TableRow>
 							))}
@@ -427,20 +580,11 @@ export default function Page(): React.JSX.Element {
 				</PracticeTableCard>
 			)}
 
-			{/* Archery */}
 			{sportKey === "archery" && (
-				<PracticeTableCard
-					title="Bắn cung — Buổi tập"
-					header={
-						<Button onClick={handleAdd} size="small" variant="contained">
-							Thêm mới
-						</Button>
-					}
-				>
+				<PracticeTableCard title="Bắn cung — Buổi tập">
 					<Table sx={{ minWidth: 1180 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Mã</TableCell>
 								<TableCell>Ngày tập</TableCell>
 								<TableCell>Cự ly (m)</TableCell>
 								<TableCell>End số</TableCell>
@@ -453,7 +597,6 @@ export default function Page(): React.JSX.Element {
 						<TableBody>
 							{(loading ? [] : (rows as ArcheryPracticeDTO[])).map((r) => (
 								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
 									<TableCell>{r.target_distance ?? "-"}</TableCell>
 									<TableCell>{r.end_number ?? "-"}</TableCell>

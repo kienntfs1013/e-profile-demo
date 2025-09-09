@@ -4,6 +4,20 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import type { User } from "@/models/user";
 import {
+	deleteArcheryPerformanceAssessmentById,
+	deleteBoxingPerformanceAssessmentById,
+	deleteShootingPerformanceAssessmentById,
+	deleteTaekwondoPerformanceAssessmentById,
+	listArcheryPerformanceAssessmentsByAthlete,
+	listBoxingPerformanceAssessmentsByAthlete,
+	listShootingPerformanceAssessmentsByAthlete,
+	listTaekwondoPerformanceAssessmentsByAthlete,
+	type ArcheryPerformanceAssessmentDTO,
+	type BoxingPerformanceAssessmentDTO,
+	type ShootingPerformanceAssessmentDTO,
+	type TaekwondoPerformanceAssessmentDTO,
+} from "@/services/evaluation.service";
+import {
 	deleteArcheryPracticeById,
 	deleteBoxingPracticeById,
 	deleteShootingPracticeById,
@@ -21,7 +35,6 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardHeader from "@mui/material/CardHeader";
-import Chip from "@mui/material/Chip";
 import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
@@ -29,9 +42,6 @@ import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
-import List from "@mui/material/List";
-import ListItem from "@mui/material/ListItem";
-import ListItemText from "@mui/material/ListItemText";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import type { SxProps } from "@mui/material/styles";
@@ -50,105 +60,6 @@ import dayjs from "dayjs";
 import "dayjs/locale/vi";
 
 dayjs.locale("vi");
-
-type RatingKey = "excellent" | "good" | "improve";
-type ReviewItem = { id: string; name: string; rating: RatingKey; note: string };
-
-const ratingLabel: Record<RatingKey, string> = {
-	excellent: "Xuất sắc",
-	good: "Tốt",
-	improve: "Cần cải thiện",
-};
-const ratingColor: Record<RatingKey, "success" | "warning" | "error"> = {
-	excellent: "success",
-	good: "warning",
-	improve: "error",
-};
-
-function CoachReviewCard({ items, onChange }: { items: ReviewItem[]; onChange: (next: ReviewItem[]) => void }) {
-	const [editing, setEditing] = React.useState(false);
-	const [draft, setDraft] = React.useState<ReviewItem[]>(items);
-
-	React.useEffect(() => {
-		if (!editing) setDraft(items);
-	}, [items, editing]);
-
-	const setItem = (id: string, patch: Partial<ReviewItem>) =>
-		setDraft((prev) => prev.map((it) => (it.id === id ? { ...it, ...patch } : it)));
-
-	return (
-		<Card>
-			<CardHeader
-				title="Đánh giá chung của huấn luyện viên"
-				action={
-					!editing ? (
-						<Button size="small" variant="outlined" startIcon={<PencilSimple />} onClick={() => setEditing(true)}>
-							Sửa
-						</Button>
-					) : (
-						<Stack direction="row" spacing={1}>
-							<Button variant="outlined" onClick={() => setEditing(false)}>
-								Hủy
-							</Button>
-							<Button
-								variant="contained"
-								onClick={() => {
-									onChange(draft);
-									setEditing(false);
-								}}
-							>
-								Lưu
-							</Button>
-						</Stack>
-					)
-				}
-			/>
-			<Divider />
-			<List sx={{ py: 0 }}>
-				{draft.map((it, idx) => (
-					<ListItem key={it.id} divider={idx < draft.length - 1} sx={{ alignItems: "stretch" }}>
-						<Box sx={{ width: "100%" }}>
-							<Stack direction="row" alignItems="center" justifyContent="space-between" gap={2}>
-								<ListItemText primary={it.name} primaryTypographyProps={{ fontWeight: 600 }} />
-								{editing ? (
-									<TextField
-										select
-										size="small"
-										value={it.rating}
-										onChange={(e) => setItem(it.id, { rating: e.target.value as RatingKey })}
-										sx={{ minWidth: 180 }}
-									>
-										<MenuItem value="excellent">{ratingLabel.excellent}</MenuItem>
-										<MenuItem value="good">{ratingLabel.good}</MenuItem>
-										<MenuItem value="improve">{ratingLabel.improve}</MenuItem>
-									</TextField>
-								) : (
-									<Chip label={ratingLabel[it.rating]} color={ratingColor[it.rating]} size="small" />
-								)}
-							</Stack>
-
-							<Box sx={{ mt: 1 }}>
-								{editing ? (
-									<TextField
-										fullWidth
-										size="small"
-										multiline
-										minRows={2}
-										placeholder="Nhận xét chi tiết…"
-										value={it.note}
-										onChange={(e) => setItem(it.id, { note: e.target.value })}
-									/>
-								) : (
-									<ListItemText secondary={it.note || "—"} secondaryTypographyProps={{ color: "text.secondary" }} />
-								)}
-							</Box>
-						</Box>
-					</ListItem>
-				))}
-			</List>
-		</Card>
-	);
-}
 
 function PracticeTableCard({
 	title,
@@ -193,6 +104,22 @@ export function TrainingSection({ user }: { user: User }) {
 		sport: "taekwondo" | "shooting" | "boxing" | "archery";
 	} | null>(null);
 
+	const [evalDate, setEvalDate] = React.useState<string>("");
+	const [evalSearch, setEvalSearch] = React.useState<string>("");
+	const [evalSort, setEvalSort] = React.useState<"newest" | "oldest">("newest");
+	const [evalPage, setEvalPage] = React.useState(0);
+	const [evalRowsPerPage, setEvalRowsPerPage] = React.useState(5);
+
+	const [tkdEval, setTkdEval] = React.useState<TaekwondoPerformanceAssessmentDTO[]>([]);
+	const [shootEval, setShootEval] = React.useState<ShootingPerformanceAssessmentDTO[]>([]);
+	const [boxEval, setBoxEval] = React.useState<BoxingPerformanceAssessmentDTO[]>([]);
+	const [archEval, setArchEval] = React.useState<ArcheryPerformanceAssessmentDTO[]>([]);
+
+	const [evalConfirm, setEvalConfirm] = React.useState<{
+		id: number | string;
+		sport: "taekwondo" | "shooting" | "boxing" | "archery";
+	} | null>(null);
+
 	const athleteId = React.useMemo(() => {
 		const raw = (user as any)?.id ?? (user as any)?.user_id;
 		const n = Number(raw);
@@ -217,22 +144,45 @@ export function TrainingSection({ user }: { user: User }) {
 			try {
 				setLoading(true);
 				setError(null);
-
 				if (sportKey === "taekwondo") {
-					const r = await listTaekwondoPracticesByAthlete(athleteId, "id-desc");
-					if (!cancelled) setTkd(r);
+					const [p, e] = await Promise.all([
+						listTaekwondoPracticesByAthlete(athleteId, "id-desc"),
+						listTaekwondoPerformanceAssessmentsByAthlete(athleteId, "id-desc"),
+					]);
+					if (!cancelled) {
+						setTkd(p);
+						setTkdEval(e);
+					}
 				} else if (sportKey === "shooting") {
-					const r = await listShootingPracticesByAthlete(athleteId, "id-desc");
-					if (!cancelled) setShoot(r);
+					const [p, e] = await Promise.all([
+						listShootingPracticesByAthlete(athleteId, "id-desc"),
+						listShootingPerformanceAssessmentsByAthlete(athleteId, "id-desc"),
+					]);
+					if (!cancelled) {
+						setShoot(p);
+						setShootEval(e);
+					}
 				} else if (sportKey === "boxing") {
-					const r = await listBoxingPracticesByAthlete(athleteId, "id-desc");
-					if (!cancelled) setBox(r);
+					const [p, e] = await Promise.all([
+						listBoxingPracticesByAthlete(athleteId, "id-desc"),
+						listBoxingPerformanceAssessmentsByAthlete(athleteId, "id-desc"),
+					]);
+					if (!cancelled) {
+						setBox(p);
+						setBoxEval(e);
+					}
 				} else if (sportKey === "archery") {
-					const r = await listArcheryPracticesByAthlete(athleteId, "id-desc");
-					if (!cancelled) setArch(r);
+					const [p, e] = await Promise.all([
+						listArcheryPracticesByAthlete(athleteId, "id-desc"),
+						listArcheryPerformanceAssessmentsByAthlete(athleteId, "id-desc"),
+					]);
+					if (!cancelled) {
+						setArch(p);
+						setArchEval(e);
+					}
 				}
 			} catch (e: any) {
-				if (!cancelled) setError(e?.message || "Không tải được dữ liệu luyện tập");
+				if (!cancelled) setError(e?.message || "Không tải được dữ liệu");
 			} finally {
 				if (!cancelled) setLoading(false);
 			}
@@ -247,10 +197,14 @@ export function TrainingSection({ user }: { user: User }) {
 		setPage(0);
 	}, [sportKey, search, sort, date]);
 
+	React.useEffect(() => {
+		setEvalPage(0);
+	}, [sportKey, evalSearch, evalSort, evalDate]);
+
 	const applyCommonSort = <T extends { created_at?: string; session_date?: string }>(arr: T[]) => {
 		const byTime = [...arr].sort((a, b) => {
-			const da = a.session_date || a.created_at || "";
-			const db = b.session_date || b.created_at || "";
+			const da = (a as any).session_date || a.created_at || "";
+			const db = (b as any).session_date || b.created_at || "";
 			return sort === "newest" ? db.localeCompare(da) : da.localeCompare(db);
 		});
 		const q = search.trim().toLowerCase();
@@ -261,16 +215,40 @@ export function TrainingSection({ user }: { user: User }) {
 		return byDate;
 	};
 
-	const applyPagination = <T,>(rows: T[]) => rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+	const applyEvalSort = <T extends { date?: string; created_at?: string }>(arr: T[]) => {
+		const byTime = [...arr].sort((a, b) => {
+			const da = (a as any).date || (a as any).created_at || "";
+			const db = (b as any).date || (b as any).created_at || "";
+			return evalSort === "newest" ? db.localeCompare(da) : da.localeCompare(db);
+		});
+		const q = evalSearch.trim().toLowerCase();
+		const bySearch = q ? byTime.filter((r) => JSON.stringify(r).toLowerCase().includes(q)) : byTime;
+		const byDate = evalDate
+			? bySearch.filter((r: any) => r.date && dayjs(r.date).isSame(dayjs(evalDate), "day"))
+			: bySearch;
+		return byDate;
+	};
+
+	const applyPagination = <T,>(rows: T[], p: number, rpp: number) => rows.slice(p * rpp, p * rpp + rpp);
 
 	const handleAdd = () => {
 		if (!athleteId || !sportKey) return;
 		router.push(`/dashboard/customers/training/${sportKey}/add?athlete=${athleteId}`);
 	};
 
+	const handleAddEvaluation = () => {
+		if (!athleteId || !sportKey) return;
+		router.push(`/dashboard/customers/evaluation/${sportKey}/add?athlete=${athleteId}`);
+	};
+
 	const handleEdit = (id: number | string) => {
 		if (!athleteId || !sportKey) return;
 		router.push(`/dashboard/customers/training/${sportKey}/update/${id}?athlete=${athleteId}`);
+	};
+
+	const handleEditEvaluation = (id: number | string) => {
+		if (!athleteId || !sportKey) return;
+		router.push(`/dashboard/customers/evaluation/${sportKey}/update/${id}?athlete=${athleteId}`);
 	};
 
 	const doDelete = async () => {
@@ -295,17 +273,170 @@ export function TrainingSection({ user }: { user: User }) {
 		}
 	};
 
+	const doDeleteEvaluation = async () => {
+		if (!evalConfirm) return;
+		const { id, sport } = evalConfirm;
+		try {
+			if (sport === "taekwondo") {
+				await deleteTaekwondoPerformanceAssessmentById(Number(id));
+				setTkdEval((prev) => prev.filter((r) => Number(r.id) !== Number(id)));
+			} else if (sport === "shooting") {
+				await deleteShootingPerformanceAssessmentById(Number(id));
+				setShootEval((prev) => prev.filter((r) => Number(r.id) !== Number(id)));
+			} else if (sport === "boxing") {
+				await deleteBoxingPerformanceAssessmentById(Number(id));
+				setBoxEval((prev) => prev.filter((r) => Number(r.id) !== Number(id)));
+			} else if (sport === "archery") {
+				await deleteArcheryPerformanceAssessmentById(Number(id));
+				setArchEval((prev) => prev.filter((r) => Number(r.id) !== Number(id)));
+			}
+		} finally {
+			setEvalConfirm(null);
+		}
+	};
+
+	const evalRows =
+		sportKey === "taekwondo"
+			? tkdEval
+			: sportKey === "shooting"
+				? shootEval
+				: sportKey === "boxing"
+					? boxEval
+					: sportKey === "archery"
+						? archEval
+						: [];
+
+	const evalFiltered = applyEvalSort(evalRows);
+	const tkdFiltered = applyCommonSort(tkd);
+	const shootFiltered = applyCommonSort(shoot);
+	const boxFiltered = applyCommonSort(box);
+	const archFiltered = applyCommonSort(arch);
+
 	return (
 		<Stack spacing={3}>
+			{sportKey ? (
+				<>
+					<Stack
+						direction="row"
+						spacing={2}
+						alignItems="center"
+						sx={{ width: "100%", flexWrap: { xs: "wrap", md: "nowrap" }, "& > *": { height: 40 } }}
+					>
+						<TextField
+							fullWidth
+							label="Tìm kiếm đánh giá"
+							value={evalSearch}
+							onChange={(e) => setEvalSearch(e.target.value)}
+							size="small"
+							sx={{ flex: "1 1 auto", minWidth: 240 }}
+						/>
+						<TextField
+							type="date"
+							label="Ngày đánh giá"
+							value={evalDate}
+							onChange={(e) => setEvalDate(e.target.value)}
+							InputLabelProps={{ shrink: true }}
+							size="small"
+							sx={{ width: { xs: "100%", md: 220 }, flex: { xs: "1 1 220px", md: "0 0 220px" } }}
+						/>
+						<Button
+							variant="outlined"
+							size="small"
+							onClick={() => setEvalDate("")}
+							sx={{ flex: { xs: "0 0 auto", md: "0 0 110px" }, px: 2 }}
+						>
+							Xóa ngày
+						</Button>
+						<TextField
+							select
+							label="Sắp xếp thời gian"
+							value={evalSort}
+							onChange={(e) => setEvalSort(e.target.value as "newest" | "oldest")}
+							size="small"
+							sx={{ width: { xs: "100%", md: 200 }, flex: { xs: "1 1 200px", md: "0 0 200px" } }}
+						>
+							<MenuItem value="newest">Mới nhất</MenuItem>
+							<MenuItem value="oldest">Cũ nhất</MenuItem>
+						</TextField>
+					</Stack>
+
+					<PracticeTableCard
+						title="Đánh giá của huấn luyện viên"
+						header={
+							<Button onClick={handleAddEvaluation} startIcon={<Plus />} size="small" variant="contained">
+								Thêm mới
+							</Button>
+						}
+					>
+						<Table sx={{ minWidth: 980 }}>
+							<TableHead>
+								<TableRow>
+									<TableCell>Ngày đánh giá</TableCell>
+									<TableCell>Điểm</TableCell>
+									<TableCell>Nội dung</TableCell>
+									<TableCell>Ngày tạo</TableCell>
+									<TableCell align="right">Thao tác</TableCell>
+								</TableRow>
+							</TableHead>
+							<TableBody>
+								{applyPagination(evalFiltered, evalPage, evalRowsPerPage).map((r: any) => (
+									<TableRow key={r.id} hover>
+										<TableCell>{r.date ? dayjs(r.date).format("DD/MM/YYYY") : "-"}</TableCell>
+										<TableCell>{r.score ?? "-"}</TableCell>
+										<TableCell sx={{ maxWidth: 520 }}>{r.comments || "-"}</TableCell>
+										<TableCell>{r.created_at ? dayjs(r.created_at).format("DD/MM/YYYY") : "-"}</TableCell>
+										<TableCell align="right">
+											<IconButton size="small" onClick={() => handleEditEvaluation(r.id)}>
+												<PencilSimple />
+											</IconButton>
+											<IconButton
+												size="small"
+												color="error"
+												onClick={() =>
+													setEvalConfirm({
+														id: r.id!,
+														sport: sportKey as "taekwondo" | "shooting" | "boxing" | "archery",
+													})
+												}
+											>
+												<Trash />
+											</IconButton>
+										</TableCell>
+									</TableRow>
+								))}
+								{!loading && evalFiltered.length === 0 && (
+									<TableRow>
+										<TableCell colSpan={6}>
+											<Box p={2} textAlign="center" color="text.secondary">
+												Không có dữ liệu
+											</Box>
+										</TableCell>
+									</TableRow>
+								)}
+							</TableBody>
+						</Table>
+						<TablePagination
+							component="div"
+							count={evalFiltered.length}
+							page={evalPage}
+							rowsPerPage={evalRowsPerPage}
+							onPageChange={(_, p) => setEvalPage(p)}
+							onRowsPerPageChange={(e) => {
+								setEvalRowsPerPage(parseInt(e.target.value, 10));
+								setEvalPage(0);
+							}}
+							rowsPerPageOptions={[5, 10, 25]}
+							labelRowsPerPage="Dòng / trang"
+						/>
+					</PracticeTableCard>
+				</>
+			) : null}
+
 			<Stack
 				direction="row"
 				spacing={2}
 				alignItems="center"
-				sx={{
-					width: "100%",
-					flexWrap: { xs: "wrap", md: "nowrap" },
-					"& > *": { height: 40 },
-				}}
+				sx={{ width: "100%", flexWrap: { xs: "wrap", md: "nowrap" }, "& > *": { height: 40 } }}
 			>
 				<TextField
 					fullWidth
@@ -357,7 +488,6 @@ export function TrainingSection({ user }: { user: User }) {
 					<Table sx={{ minWidth: 980 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Mã</TableCell>
 								<TableCell>Ngày tập</TableCell>
 								<TableCell>Kỹ thuật</TableCell>
 								<TableCell>Drills</TableCell>
@@ -368,15 +498,14 @@ export function TrainingSection({ user }: { user: User }) {
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{applyPagination(applyCommonSort(tkd)).map((r) => (
+							{applyPagination(tkdFiltered, page, rowsPerPage).map((r) => (
 								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
 									<TableCell>{r.technique || "-"}</TableCell>
 									<TableCell>{r.drills_practiced || "-"}</TableCell>
 									<TableCell>{r.sparring_duration ?? "-"}</TableCell>
 									<TableCell>{r.fitness_exercises || "-"}</TableCell>
-									<TableCell>{r.notes || "-"}</TableCell>
+									<TableCell>{r.comments || "-"}</TableCell>
 									<TableCell align="right">
 										<IconButton size="small" onClick={() => handleEdit(r.id)}>
 											<PencilSimple />
@@ -391,7 +520,7 @@ export function TrainingSection({ user }: { user: User }) {
 									</TableCell>
 								</TableRow>
 							))}
-							{!loading && tkd.length === 0 && (
+							{!loading && tkdFiltered.length === 0 && (
 								<TableRow>
 									<TableCell colSpan={8}>
 										<Box p={2} textAlign="center" color="text.secondary">
@@ -404,7 +533,7 @@ export function TrainingSection({ user }: { user: User }) {
 					</Table>
 					<TablePagination
 						component="div"
-						count={applyCommonSort(tkd).length}
+						count={tkdFiltered.length}
 						page={page}
 						rowsPerPage={rowsPerPage}
 						onPageChange={(_, p) => setPage(p)}
@@ -430,7 +559,6 @@ export function TrainingSection({ user }: { user: User }) {
 					<Table sx={{ minWidth: 1180 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Mã</TableCell>
 								<TableCell>Ngày tập</TableCell>
 								<TableCell>Loại súng</TableCell>
 								<TableCell>Cự ly</TableCell>
@@ -443,9 +571,8 @@ export function TrainingSection({ user }: { user: User }) {
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{applyPagination(applyCommonSort(shoot)).map((r) => (
+							{applyPagination(shootFiltered, page, rowsPerPage).map((r) => (
 								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
 									<TableCell>{r.weapon_type || "-"}</TableCell>
 									<TableCell>{r.distance ?? "-"}</TableCell>
@@ -453,7 +580,7 @@ export function TrainingSection({ user }: { user: User }) {
 									<TableCell>{r.shots_fired ?? "-"}</TableCell>
 									<TableCell>{r.shots_hit ?? "-"}</TableCell>
 									<TableCell>{r.accuracy ?? "-"}</TableCell>
-									<TableCell>{r.notes || "-"}</TableCell>
+									<TableCell>{r.comments || "-"}</TableCell>
 									<TableCell align="right">
 										<IconButton size="small" onClick={() => handleEdit(r.id)}>
 											<PencilSimple />
@@ -464,7 +591,7 @@ export function TrainingSection({ user }: { user: User }) {
 									</TableCell>
 								</TableRow>
 							))}
-							{!loading && shoot.length === 0 && (
+							{!loading && shootFiltered.length === 0 && (
 								<TableRow>
 									<TableCell colSpan={10}>
 										<Box p={2} textAlign="center" color="text.secondary">
@@ -477,7 +604,7 @@ export function TrainingSection({ user }: { user: User }) {
 					</Table>
 					<TablePagination
 						component="div"
-						count={applyCommonSort(shoot).length}
+						count={shootFiltered.length}
 						page={page}
 						rowsPerPage={rowsPerPage}
 						onPageChange={(_, p) => setPage(p)}
@@ -503,7 +630,6 @@ export function TrainingSection({ user }: { user: User }) {
 					<Table sx={{ minWidth: 1180 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Mã</TableCell>
 								<TableCell>Hiệp</TableCell>
 								<TableCell>Cú ra đòn</TableCell>
 								<TableCell>Đòn trúng</TableCell>
@@ -516,16 +642,15 @@ export function TrainingSection({ user }: { user: User }) {
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{applyPagination(applyCommonSort(box)).map((r) => (
+							{applyPagination(boxFiltered, page, rowsPerPage).map((r) => (
 								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.round_number ?? "-"}</TableCell>
 									<TableCell>{r.punches_thrown ?? "-"}</TableCell>
 									<TableCell>{r.punches_landed ?? "-"}</TableCell>
 									<TableCell>{r.defense_success_rate ?? "-"}</TableCell>
 									<TableCell>{r.footwork_score ?? "-"}</TableCell>
 									<TableCell>{r.sparring_partner || "-"}</TableCell>
-									<TableCell>{r.notes || "-"}</TableCell>
+									<TableCell>{r.comments || "-"}</TableCell>
 									<TableCell>{r.created_at ? dayjs(r.created_at).format("DD/MM/YYYY") : "-"}</TableCell>
 									<TableCell align="right">
 										<IconButton size="small" onClick={() => handleEdit(r.id)}>
@@ -537,7 +662,7 @@ export function TrainingSection({ user }: { user: User }) {
 									</TableCell>
 								</TableRow>
 							))}
-							{!loading && box.length === 0 && (
+							{!loading && boxFiltered.length === 0 && (
 								<TableRow>
 									<TableCell colSpan={10}>
 										<Box p={2} textAlign="center" color="text.secondary">
@@ -550,7 +675,7 @@ export function TrainingSection({ user }: { user: User }) {
 					</Table>
 					<TablePagination
 						component="div"
-						count={applyCommonSort(box).length}
+						count={boxFiltered.length}
 						page={page}
 						rowsPerPage={rowsPerPage}
 						onPageChange={(_, p) => setPage(p)}
@@ -576,7 +701,6 @@ export function TrainingSection({ user }: { user: User }) {
 					<Table sx={{ minWidth: 1180 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Mã</TableCell>
 								<TableCell>Ngày tập</TableCell>
 								<TableCell>Cự ly (m)</TableCell>
 								<TableCell>End số</TableCell>
@@ -588,9 +712,8 @@ export function TrainingSection({ user }: { user: User }) {
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{applyPagination(applyCommonSort(arch)).map((r) => (
+							{applyPagination(archFiltered, page, rowsPerPage).map((r) => (
 								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
 									<TableCell>{r.target_distance ?? "-"}</TableCell>
 									<TableCell>{r.end_number ?? "-"}</TableCell>
@@ -608,7 +731,7 @@ export function TrainingSection({ user }: { user: User }) {
 									</TableCell>
 								</TableRow>
 							))}
-							{!loading && arch.length === 0 && (
+							{!loading && archFiltered.length === 0 && (
 								<TableRow>
 									<TableCell colSpan={9}>
 										<Box p={2} textAlign="center" color="text.secondary">
@@ -621,7 +744,7 @@ export function TrainingSection({ user }: { user: User }) {
 					</Table>
 					<TablePagination
 						component="div"
-						count={applyCommonSort(arch).length}
+						count={archFiltered.length}
 						page={page}
 						rowsPerPage={rowsPerPage}
 						onPageChange={(_, p) => setPage(p)}
@@ -651,6 +774,21 @@ export function TrainingSection({ user }: { user: User }) {
 						Hủy
 					</Button>
 					<Button color="error" variant="contained" onClick={doDelete}>
+						Đồng ý
+					</Button>
+				</DialogActions>
+			</Dialog>
+
+			<Dialog open={!!evalConfirm} onClose={() => setEvalConfirm(null)} fullWidth maxWidth="xs">
+				<DialogTitle>Xác nhận xóa đánh giá</DialogTitle>
+				<DialogContent>
+					<DialogContentText>Bạn có chắc muốn xóa bản ghi {evalConfirm?.id ?? ""}?</DialogContentText>
+				</DialogContent>
+				<DialogActions>
+					<Button variant="outlined" onClick={() => setEvalConfirm(null)}>
+						Hủy
+					</Button>
+					<Button color="error" variant="contained" onClick={doDeleteEvaluation}>
 						Đồng ý
 					</Button>
 				</DialogActions>

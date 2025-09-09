@@ -263,7 +263,6 @@ export function AchievementSection({ user }: { user: User }) {
 					<Table sx={{ minWidth: 1100 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Mã</TableCell>
 								<TableCell>Giải đấu</TableCell>
 								<TableCell>Huy chương</TableCell>
 								<TableCell>Hạng</TableCell>
@@ -276,7 +275,6 @@ export function AchievementSection({ user }: { user: User }) {
 						<TableBody>
 							{paginate(applySortFilter(arch)).map((r) => (
 								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.competition_id ?? "—"}</TableCell>
 									<TableCell>{r.medal_won ?? "—"}</TableCell>
 									<TableCell>{r.final_rank != null ? <Chip size="small" label={r.final_rank} /> : "—"}</TableCell>
@@ -338,7 +336,6 @@ export function AchievementSection({ user }: { user: User }) {
 					<Table sx={{ minWidth: 1100 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Mã</TableCell>
 								<TableCell>Giải đấu</TableCell>
 								<TableCell>Huy chương</TableCell>
 								<TableCell>Hạng</TableCell>
@@ -351,7 +348,6 @@ export function AchievementSection({ user }: { user: User }) {
 						<TableBody>
 							{paginate(applySortFilter(shoot)).map((r) => (
 								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.competition_id ?? "—"}</TableCell>
 									<TableCell>{r.medal_won ?? "—"}</TableCell>
 									<TableCell>{r.final_rank != null ? <Chip size="small" label={r.final_rank} /> : "—"}</TableCell>
@@ -407,7 +403,6 @@ export function AchievementSection({ user }: { user: User }) {
 					<Table sx={{ minWidth: 1100 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Mã</TableCell>
 								<TableCell>Giải đấu</TableCell>
 								<TableCell>Huy chương</TableCell>
 								<TableCell>Hạng</TableCell>
@@ -420,7 +415,6 @@ export function AchievementSection({ user }: { user: User }) {
 						<TableBody>
 							{paginate(applySortFilter(box)).map((r) => (
 								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.competition_id ?? "—"}</TableCell>
 									<TableCell>{r.medal_won ?? "—"}</TableCell>
 									<TableCell>{r.final_rank != null ? <Chip size="small" label={r.final_rank} /> : "—"}</TableCell>
@@ -476,7 +470,6 @@ export function AchievementSection({ user }: { user: User }) {
 					<Table sx={{ minWidth: 1100 }}>
 						<TableHead>
 							<TableRow>
-								<TableCell>Mã</TableCell>
 								<TableCell>Giải đấu</TableCell>
 								<TableCell>Huy chương</TableCell>
 								<TableCell>Hạng</TableCell>
@@ -489,7 +482,6 @@ export function AchievementSection({ user }: { user: User }) {
 						<TableBody>
 							{paginate(applySortFilter(tkd)).map((r) => (
 								<TableRow key={r.id} hover>
-									<TableCell>{r.id}</TableCell>
 									<TableCell>{r.competition_id ?? "—"}</TableCell>
 									<TableCell>{r.medal_won ?? "—"}</TableCell>
 									<TableCell>{r.final_rank != null ? <Chip size="small" label={r.final_rank} /> : "—"}</TableCell>
