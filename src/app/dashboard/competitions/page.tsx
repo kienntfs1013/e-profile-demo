@@ -38,7 +38,6 @@ import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 
 type SportKey = "all" | "shooting" | "archery" | "boxing" | "taekwondo";
 
-/* ---------- small utils ---------- */
 function normalizeSportKey(apiText?: string): Exclude<SportKey, "all"> | "" {
 	const s = (apiText || "").toLowerCase();
 	if (s.includes("shoot") || s.includes("bắn súng") || s.includes("ban sung")) return "shooting";
