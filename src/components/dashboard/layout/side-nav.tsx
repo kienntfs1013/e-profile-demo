@@ -50,17 +50,25 @@ const filterItemsByRole = (items: NavItemConfig[], role: RoleView | null) => {
 		"training",
 		"achievement",
 		"competitions",
+		"customers"
 	]);
 	const hideForManager = new Set([
 		"health",
 		"training",
 		"achievement",
-		"competitions",
 		"usersManagement",
 		"coaches",
 		"customers",
 	]);
-	const hideForAdmin = new Set(["health", "training", "achievement", "competitions", "coaches", "customers"]);
+	const hideForAdmin = new Set([
+		"health",
+		"training",
+		"achievement",
+		"coaches",
+		"customers",
+		"athletesManagement",
+		"coachesManagement",
+	]);
 	const hide =
 		role === "athlete"
 			? hideForAthlete

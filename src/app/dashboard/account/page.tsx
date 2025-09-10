@@ -43,6 +43,8 @@ const sports = [
 	{ value: "boxing", label: "Boxing" },
 ] as const;
 
+const DEFAULT_AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/a/a3/Image-not-found.png?20210521171500";
+
 type FormState = {
 	avatar?: string;
 	lastName: string;
@@ -113,6 +115,8 @@ export default function Page(): React.JSX.Element {
 	const [avatarUrl, setAvatarUrl] = React.useState<string | undefined>(undefined);
 	const [uploadingAvatar, setUploadingAvatar] = React.useState(false);
 	const [uploadedAvatarPath, setUploadedAvatarPath] = React.useState<string>();
+	const [removedAvatar, setRemovedAvatar] = React.useState(false); // <— đánh dấu xóa ảnh
+
 	const [emailExists, setEmailExists] = React.useState(false);
 	const [phoneExists, setPhoneExists] = React.useState(false);
 	const [emailChecking, setEmailChecking] = React.useState(false);
@@ -138,6 +142,7 @@ export default function Page(): React.JSX.Element {
 			if (!res.ok) throw new Error(res.error || res.message || "Upload thất bại");
 			if (res.url) setAvatarUrl(res.url);
 			if (res.path) setUploadedAvatarPath(res.path);
+			setRemovedAvatar(false); // vừa upload lại thì không còn trạng thái xóa
 			setToast({ type: "success", message: "Tải ảnh thành công" });
 		} catch (err: any) {
 			setToast({ type: "error", message: err?.message || "Không upload được ảnh" });
@@ -206,7 +211,7 @@ export default function Page(): React.JSX.Element {
 				const avatar =
 					buildImageUrl(user.profile_picture_path) ||
 					buildImageUrl((athlete as AthleteDTO | null)?.athlete_profile_picture_path) ||
-					"https://upload.wikimedia.org/wikipedia/commons/a/a3/Image-not-found.png?20210521171500";
+					DEFAULT_AVATAR_URL;
 
 				const roleInt = parseRoleToInt(user.role);
 
@@ -232,6 +237,7 @@ export default function Page(): React.JSX.Element {
 				setForm(nextForm);
 				setAvatarUrl(nextForm.avatar);
 				setUploadedAvatarPath(undefined);
+				setRemovedAvatar(false);
 			} catch (e: any) {
 				setFetchError(e?.response?.data?.message || e?.message || "Không tải được dữ liệu");
 			} finally {
@@ -286,6 +292,16 @@ export default function Page(): React.JSX.Element {
 		}
 	}, []);
 
+	const handleRemoveAvatar = () => {
+		if (previewRef.current) {
+			URL.revokeObjectURL(previewRef.current);
+			previewRef.current = null;
+		}
+		setAvatarUrl(DEFAULT_AVATAR_URL);
+		setUploadedAvatarPath(undefined);
+		setRemovedAvatar(true);
+	};
+
 	const handleSave = async () => {
 		try {
 			setSaving(true);
@@ -319,6 +335,9 @@ export default function Page(): React.JSX.Element {
 				return;
 			}
 
+			// Nếu removedAvatar = true => gửi path rỗng để server clear ảnh
+			const nextProfilePath = removedAvatar ? "" : (uploadedAvatarPath ?? current.profile_picture_path);
+
 			const payload = {
 				firstName: form.firstName,
 				lastName: form.lastName,
@@ -329,7 +348,7 @@ export default function Page(): React.JSX.Element {
 				sport: mapSportToVN(form.sport) ?? current.sport,
 				country: mapNationToCountry(form.nation) ?? current.country ?? "Việt Nam",
 				role: form.role !== "" ? Number(form.role) : parseRoleToInt(current.role),
-				profile_picture_path: uploadedAvatarPath ?? current.profile_picture_path,
+				profile_picture_path: nextProfilePath,
 				address: form.address || current.address,
 				district: form.district || current.district,
 				city: form.city || current.city,
@@ -343,7 +362,15 @@ export default function Page(): React.JSX.Element {
 
 			setFetchError(null);
 			setToast({ type: "success", message: "Đã lưu thay đổi" });
-			router.refresh();
+
+			// Reload lại trang sau khi cập nhật thành công
+			if (typeof window !== "undefined") {
+				window.setTimeout(() => {
+					window.location.reload();
+				}, 350); // một nhịp nhỏ để user thấy toast
+			} else {
+				router.refresh(); // fallback
+			}
 		} catch (e: any) {
 			const msg = e?.response?.data?.message || e?.message || "Lỗi kết nối Cơ Sở Dữ Liệu";
 			setToast({ type: "error", message: msg });
@@ -370,23 +397,9 @@ export default function Page(): React.JSX.Element {
 									<Button variant="outlined" onClick={onPickFile} disabled={uploadingAvatar}>
 										{uploadingAvatar ? "Đang tải ảnh..." : "Tải ảnh lên"}
 									</Button>
-									{avatarUrl ? (
-										<Button
-											variant="text"
-											color="error"
-											onClick={() => {
-												if (previewRef.current) {
-													URL.revokeObjectURL(previewRef.current);
-													previewRef.current = null;
-												}
-												setAvatarUrl(undefined);
-												setUploadedAvatarPath(undefined);
-											}}
-											disabled={uploadingAvatar}
-										>
-											Xóa ảnh
-										</Button>
-									) : null}
+									<Button variant="text" color="error" onClick={handleRemoveAvatar} disabled={uploadingAvatar}>
+										Xóa ảnh
+									</Button>
 								</Stack>
 								<input ref={fileRef} type="file" accept="image/*" hidden onChange={onFileChange} />
 							</Stack>

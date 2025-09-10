@@ -46,7 +46,7 @@ export const navItems = [
 	},
 	{
 		key: "competitions",
-		title: "Giải đấu",
+		title: "Quản lý giải đấu",
 		href: paths.dashboard.competitions,
 		icon: "trophy",
 	},
