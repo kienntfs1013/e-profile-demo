@@ -19,7 +19,6 @@ import Card from "@mui/material/Card";
 import CardHeader from "@mui/material/CardHeader";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
-import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import type { SxProps } from "@mui/material/styles";
@@ -30,8 +29,6 @@ import TableHead from "@mui/material/TableHead";
 import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
-import { PencilSimple } from "@phosphor-icons/react/dist/ssr/PencilSimple";
-import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
 import dayjs from "dayjs";
 
 import "dayjs/locale/vi";
@@ -222,14 +219,7 @@ export default function Page() {
 	const TableShell = (props: { title: string; showRecordedAt?: boolean }) => {
 		const { title, showRecordedAt } = props;
 		return (
-			<SectionCard
-				title={title}
-				header={
-					<Button onClick={handleAdd} startIcon={<Plus />} size="small" variant="contained">
-						Thêm mới
-					</Button>
-				}
-			>
+			<SectionCard title={title}>
 				<Table sx={{ minWidth: 1100 }}>
 					<TableHead>
 						<TableRow>
@@ -239,7 +229,6 @@ export default function Page() {
 							<TableCell>Kết quả</TableCell>
 							<TableCell>Ghi chú</TableCell>
 							<TableCell>{showRecordedAt ? "Ngày ghi nhận" : "Ngày tạo"}</TableCell>
-							<TableCell align="right">Sửa</TableCell>
 						</TableRow>
 					</TableHead>
 					<TableBody>
@@ -262,11 +251,6 @@ export default function Page() {
 										<TableCell>{parseResult(r.result_data)}</TableCell>
 										<TableCell>{r.notes || "—"}</TableCell>
 										<TableCell>{when ? dayjs(when).format("DD/MM/YYYY") : "—"}</TableCell>
-										<TableCell align="right">
-											<IconButton size="small" onClick={() => handleEdit(r.id)}>
-												<PencilSimple />
-											</IconButton>
-										</TableCell>
 									</TableRow>
 								);
 							})
@@ -301,7 +285,6 @@ export default function Page() {
 
 	return (
 		<Stack spacing={3}>
-			{/* Filters */}
 			<Stack
 				direction={{ xs: "column", md: "row" }}
 				spacing={2}
@@ -347,7 +330,6 @@ export default function Page() {
 				</TextField>
 			</Stack>
 
-			{/* Tables */}
 			{sportKey === "archery" && <TableShell title="Bắn cung — Thành tích thi đấu" showRecordedAt />}
 			{sportKey === "shooting" && <TableShell title="Bắn súng — Thành tích thi đấu" />}
 			{sportKey === "boxing" && <TableShell title="Boxing — Thành tích thi đấu" />}

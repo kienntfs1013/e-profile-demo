@@ -115,7 +115,7 @@ export default function Page(): React.JSX.Element {
 	const [avatarUrl, setAvatarUrl] = React.useState<string | undefined>(undefined);
 	const [uploadingAvatar, setUploadingAvatar] = React.useState(false);
 	const [uploadedAvatarPath, setUploadedAvatarPath] = React.useState<string>();
-	const [removedAvatar, setRemovedAvatar] = React.useState(false); // <— đánh dấu xóa ảnh
+	const [removedAvatar, setRemovedAvatar] = React.useState(false);
 
 	const [emailExists, setEmailExists] = React.useState(false);
 	const [phoneExists, setPhoneExists] = React.useState(false);
@@ -142,7 +142,7 @@ export default function Page(): React.JSX.Element {
 			if (!res.ok) throw new Error(res.error || res.message || "Upload thất bại");
 			if (res.url) setAvatarUrl(res.url);
 			if (res.path) setUploadedAvatarPath(res.path);
-			setRemovedAvatar(false); // vừa upload lại thì không còn trạng thái xóa
+			setRemovedAvatar(false);
 			setToast({ type: "success", message: "Tải ảnh thành công" });
 		} catch (err: any) {
 			setToast({ type: "error", message: err?.message || "Không upload được ảnh" });
@@ -335,7 +335,6 @@ export default function Page(): React.JSX.Element {
 				return;
 			}
 
-			// Nếu removedAvatar = true => gửi path rỗng để server clear ảnh
 			const nextProfilePath = removedAvatar ? "" : (uploadedAvatarPath ?? current.profile_picture_path);
 
 			const payload = {
@@ -363,13 +362,12 @@ export default function Page(): React.JSX.Element {
 			setFetchError(null);
 			setToast({ type: "success", message: "Đã lưu thay đổi" });
 
-			// Reload lại trang sau khi cập nhật thành công
 			if (typeof window !== "undefined") {
 				window.setTimeout(() => {
 					window.location.reload();
-				}, 350); // một nhịp nhỏ để user thấy toast
+				}, 350);
 			} else {
-				router.refresh(); // fallback
+				router.refresh();
 			}
 		} catch (e: any) {
 			const msg = e?.response?.data?.message || e?.message || "Lỗi kết nối Cơ Sở Dữ Liệu";

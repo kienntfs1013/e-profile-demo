@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -20,21 +21,14 @@ import { Syringe } from "@phosphor-icons/react/dist/ssr/Syringe";
 import { TestTube } from "@phosphor-icons/react/dist/ssr/TestTube";
 import { Thermometer } from "@phosphor-icons/react/dist/ssr/Thermometer";
 import { Waveform } from "@phosphor-icons/react/dist/ssr/Waveform";
-import {
-	Bar,
-	BarChart,
-	CartesianGrid,
-	Cell,
-	Legend,
-	Line,
-	LineChart,
-	Pie,
-	PieChart,
-	ResponsiveContainer,
-	Tooltip,
-	XAxis,
-	YAxis,
-} from "recharts";
+
+const StepsBar = dynamic(() => import("./charts/StepsBar"), { ssr: false, loading: () => <Box height={320} /> });
+const BpmLine = dynamic(() => import("./charts/BpmLine"), { ssr: false, loading: () => <Box height={320} /> });
+const SleepPie = dynamic(() => import("./charts/SleepPie"), { ssr: false, loading: () => <Box height={320} /> });
+const SpO2GlucoseLine = dynamic(() => import("./charts/SpO2GlucoseLine"), {
+	ssr: false,
+	loading: () => <Box height={320} />,
+});
 
 type Metric = {
 	key: string;
@@ -72,7 +66,6 @@ const ALL_METRICS: Metric[] = [
 	{ key: "uric", label: "Uric Acid", value: "5.6", unit: "mg/dL", icon: TestTube, color: "#fb7185", group: "labs" },
 ];
 
-/* -------- Helpers: parse + đánh giá tình trạng -------- */
 const toNumber = (s: string) => Number(String(s).replace(/[^\d.-]/g, ""));
 const parseBP = (s: string) => {
 	const [sys, dia] = s.split("/").map((x) => Number(x));
@@ -152,18 +145,15 @@ function evalMetric(m: Metric): HealthEval {
 				return { status: "normal", label: "Bình thường", chipColor: "warning" };
 			return { status: "danger", label: "Nguy hiểm", chipColor: "error" };
 		}
-		// Cân nặng: thiếu chiều cao → coi là bình thường (tham khảo)
 		case "weight":
 		default:
 			return { status: "normal", label: "Bình thường", chipColor: "warning" };
 	}
 }
 
-/* -------- Thẻ metric hiển thị Chip đánh giá -------- */
-function MetricCard({ m }: { m: Metric }) {
+const MetricCard = React.memo(function MetricCard({ m }: { m: Metric }) {
 	const Icon = m.icon;
 	const evalRes = evalMetric(m);
-
 	return (
 		<Card sx={{ height: "100%", borderRadius: 2 }}>
 			<CardContent>
@@ -186,13 +176,11 @@ function MetricCard({ m }: { m: Metric }) {
 						<Icon weight="fill" />
 					</Box>
 				</Box>
-
 				<Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1 }}>
 					<Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
 						<Typography variant="h5" sx={{ fontWeight: 700 }}>
 							{m.value}
 						</Typography>
-
 						{m.unit ? (
 							<Typography variant="body2" color="text.secondary">
 								{m.unit}
@@ -201,7 +189,6 @@ function MetricCard({ m }: { m: Metric }) {
 					</Box>
 					<Chip size="small" label={evalRes.label} color={evalRes.chipColor} />
 				</Box>
-
 				{m.helper ? (
 					<Typography variant="caption" color="text.secondary">
 						{m.helper}
@@ -210,7 +197,7 @@ function MetricCard({ m }: { m: Metric }) {
 			</CardContent>
 		</Card>
 	);
-}
+});
 
 type DayPoint = { d: string; bpm: number; steps: number; spo2: number; sleepH: number; glucose: number };
 const data7d: DayPoint[] = [
@@ -232,8 +219,6 @@ const data30d: DayPoint[] = Array.from({ length: 30 }).map((_, i) => ({
 	glucose: 85 + ((i * 11) % 20),
 }));
 
-const PIE_COLORS = ["#22c55e", "#ef4444", "#6366f1", "#f59e0b", "#06b6d4", "#3b82f6"];
-
 function buildSleepPie(points: DayPoint[]) {
 	const total = points.reduce((acc, p) => acc + p.sleepH, 0);
 	return [
@@ -250,9 +235,7 @@ export default function Page(): React.JSX.Element {
 	const [statusFilter, setStatusFilter] = React.useState<"all" | HealthStatus>("all");
 
 	const visible = React.useMemo(() => ALL_METRICS.filter((m) => (type === "all" ? true : m.group === type)), [type]);
-
 	const visibleWithEval = React.useMemo(() => visible.map((m) => ({ metric: m, eval: evalMetric(m) })), [visible]);
-
 	const filtered = React.useMemo(
 		() => visibleWithEval.filter((x) => (statusFilter === "all" ? true : x.eval.status === statusFilter)),
 		[visibleWithEval, statusFilter]
@@ -263,7 +246,6 @@ export default function Page(): React.JSX.Element {
 
 	return (
 		<Grid container spacing={3}>
-			{/* Hàng bộ lọc - tự co giãn khít chiều ngang với CSS Grid + auto-fit */}
 			<Grid size={{ xs: 12 }}>
 				<Box
 					sx={{
@@ -289,7 +271,6 @@ export default function Page(): React.JSX.Element {
 						<MenuItem value="activity">Hoạt động</MenuItem>
 						<MenuItem value="labs">Xét nghiệm</MenuItem>
 					</TextField>
-
 					<TextField
 						select
 						size="small"
@@ -302,7 +283,6 @@ export default function Page(): React.JSX.Element {
 						<MenuItem value="normal">Bình thường</MenuItem>
 						<MenuItem value="danger">Nguy hiểm</MenuItem>
 					</TextField>
-
 					<TextField
 						type="date"
 						size="small"
@@ -311,7 +291,6 @@ export default function Page(): React.JSX.Element {
 						onChange={(e) => setSelectedDate(e.target.value)}
 						InputLabelProps={{ shrink: true }}
 					/>
-
 					<TextField
 						select
 						size="small"
@@ -325,22 +304,12 @@ export default function Page(): React.JSX.Element {
 				</Box>
 			</Grid>
 
-			{/* Danh sách chỉ số + đánh giá */}
 			{filtered.map(({ metric }) => (
-				<Grid
-					key={metric.key}
-					size={{
-						xs: 12,
-						sm: 6,
-						md: 4,
-						lg: 3,
-					}}
-				>
+				<Grid key={metric.key} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
 					<MetricCard m={metric} />
 				</Grid>
 			))}
 
-			{/* Charts */}
 			<Grid size={{ xs: 12 }}>
 				<Grid container spacing={3}>
 					<Grid size={{ xs: 12, md: 6 }}>
@@ -349,77 +318,37 @@ export default function Page(): React.JSX.Element {
 								<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
 									Bước đi theo ngày ({range === "7d" ? "7 ngày" : "30 ngày"})
 								</Typography>
-								<ResponsiveContainer width="100%" height="85%">
-									<BarChart data={series}>
-										<CartesianGrid strokeDasharray="3 3" />
-										<XAxis dataKey="d" />
-										<YAxis />
-										<Tooltip />
-										<Bar dataKey="steps" fill="#6366f1" />
-									</BarChart>
-								</ResponsiveContainer>
+								<StepsBar data={series} />
 							</CardContent>
 						</Card>
 					</Grid>
-
 					<Grid size={{ xs: 12, md: 6 }}>
 						<Card sx={{ height: 400, borderRadius: 2 }}>
 							<CardContent sx={{ height: "100%" }}>
 								<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
 									Nhịp tim (BPM) theo ngày
 								</Typography>
-								<ResponsiveContainer width="100%" height="85%">
-									<LineChart data={series}>
-										<CartesianGrid strokeDasharray="3 3" />
-										<XAxis dataKey="d" />
-										<YAxis />
-										<Tooltip />
-										<Legend />
-										<Line type="monotone" dataKey="bpm" dot={false} />
-									</LineChart>
-								</ResponsiveContainer>
+								<BpmLine data={series} />
 							</CardContent>
 						</Card>
 					</Grid>
-
 					<Grid size={{ xs: 12, md: 6 }}>
 						<Card sx={{ height: 400, borderRadius: 2 }}>
 							<CardContent sx={{ height: "100%" }}>
 								<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
 									Cấu trúc giấc ngủ ({range === "7d" ? "7 ngày" : "30 ngày"})
 								</Typography>
-								<ResponsiveContainer width="100%" height="85%">
-									<PieChart>
-										<Tooltip />
-										<Legend />
-										<Pie data={sleepPie} dataKey="value" nameKey="name" outerRadius={110} label>
-											{sleepPie.map((_, i) => (
-												<Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-											))}
-										</Pie>
-									</PieChart>
-								</ResponsiveContainer>
+								<SleepPie data={sleepPie} />
 							</CardContent>
 						</Card>
 					</Grid>
-
 					<Grid size={{ xs: 12, md: 6 }}>
 						<Card sx={{ height: 400, borderRadius: 2 }}>
 							<CardContent sx={{ height: "100%" }}>
 								<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
 									SpO₂ & Đường huyết theo ngày
 								</Typography>
-								<ResponsiveContainer width="100%" height="85%">
-									<LineChart data={series}>
-										<CartesianGrid strokeDasharray="3 3" />
-										<XAxis dataKey="d" />
-										<YAxis />
-										<Tooltip />
-										<Legend />
-										<Line type="monotone" dataKey="spo2" dot={false} />
-										<Line type="monotone" dataKey="glucose" dot={false} />
-									</LineChart>
-								</ResponsiveContainer>
+								<SpO2GlucoseLine data={series} />
 							</CardContent>
 						</Card>
 					</Grid>

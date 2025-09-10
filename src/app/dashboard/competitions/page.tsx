@@ -33,7 +33,7 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { PencilSimple } from "@phosphor-icons/react/dist/ssr/PencilSimple";
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
+import { Plus as PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 
 type SportKey = "all" | "shooting" | "archery" | "boxing" | "taekwondo";
@@ -142,14 +142,12 @@ export default function CompetitionsPage(): React.JSX.Element {
 			await deleteCompetitionById(confirmItem.id);
 			setToast({ type: "success", message: "Đã xóa giải đấu" });
 
-			// refetch trang hiện tại
 			const controller = new AbortController();
 			const filters: Record<string, string> = {};
 			if (qDebounced.trim()) filters.q = qDebounced.trim();
 			if (sport !== "all") filters.sport_type = mapSportKeyToApi(sport);
 			const res = await listCompetitionsPage(page + 1, rowsPerPage, filters, "id-desc", controller.signal);
 
-			// Nếu xóa xong mà trang hiện tại trống (vd xóa bản ghi cuối cùng) → lùi 1 trang
 			if (res.data.length === 0 && page > 0) {
 				setPage((p) => p - 1);
 			} else {

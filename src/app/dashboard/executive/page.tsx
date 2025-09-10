@@ -217,6 +217,10 @@ export default function ExecutivePage() {
 	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(6);
 
+	React.useEffect(() => {
+		setPage(0);
+	}, [keyword, from, to, sort]);
+
 	const inRange = (d?: string) => {
 		if (!d) return true;
 		const t = new Date(d).getTime();
@@ -353,6 +357,7 @@ export default function ExecutivePage() {
 					<CardActionArea component="a" href={featured.href}>
 						<CardMedia
 							component="img"
+							loading="lazy"
 							image={featured.image}
 							alt={featured.title}
 							sx={{ height: { xs: 220, md: 380 }, objectFit: "cover" }}
@@ -376,7 +381,13 @@ export default function ExecutivePage() {
 				{subNews.map((n) => (
 					<Card key={n.id} sx={{ flex: 1, borderRadius: 2, overflow: "hidden" }}>
 						<CardActionArea component="a" href={n.href}>
-							<CardMedia component="img" image={n.image} alt={n.title} sx={{ height: 200, objectFit: "cover" }} />
+							<CardMedia
+								component="img"
+								loading="lazy"
+								image={n.image}
+								alt={n.title}
+								sx={{ height: 200, objectFit: "cover" }}
+							/>
 							<CardContent>
 								<Typography variant="h6" fontWeight={800} lineHeight={1.3}>
 									{n.title}
@@ -400,6 +411,7 @@ export default function ExecutivePage() {
 						<CardActionArea component="a" href={directiveMain.href}>
 							<CardMedia
 								component="img"
+								loading="lazy"
 								image={directiveMain.image}
 								alt={directiveMain.title}
 								sx={{ height: { xs: 220, md: 360 }, objectFit: "cover" }}
@@ -419,6 +431,7 @@ export default function ExecutivePage() {
 									<CardActionArea component="a" href={n.href}>
 										<CardMedia
 											component="img"
+											loading="lazy"
 											image={n.image}
 											alt={n.title}
 											sx={{ width: "100%", height: "100%", objectFit: "cover" }}
@@ -470,7 +483,9 @@ export default function ExecutivePage() {
 												{d.code}
 											</MLink>
 										</TableCell>
-										<TableCell>{new Date(d.date).toLocaleDateString("vi-VN")}</TableCell>
+										<TableCell>
+											{new Date(d.date).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
+										</TableCell>
 										<TableCell>{d.excerpt}</TableCell>
 										<TableCell>
 											{d.fileUrl ? (
