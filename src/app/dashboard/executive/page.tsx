@@ -326,23 +326,6 @@ export default function ExecutivePage() {
 						<MenuItem value="asc">Cũ nhất</MenuItem>
 					</TextField>
 				</Stack>
-
-				<Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
-					<Button
-						startIcon={<PlusIcon size={18} />}
-						variant="contained"
-						onClick={() => router.push("/dashboard/docs/new")}
-					>
-						Thêm mới
-					</Button>
-					<Button
-						startIcon={<GearSixIcon size={18} />}
-						variant="outlined"
-						onClick={() => router.push("/dashboard/docs/manage")}
-					>
-						Quản lý
-					</Button>
-				</Stack>
 			</Stack>
 
 			<Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>

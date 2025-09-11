@@ -61,6 +61,7 @@ const filterItemsByRole = (items: NavItemConfig[], role: RoleView | null) => {
 		"customers",
 	]);
 	const hideForAdmin = new Set([
+		"account",
 		"health",
 		"training",
 		"achievement",

@@ -252,7 +252,6 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 				</Stack>
 			</Paper>
 
-			{/* Chỉ render UI chọn tab khi: user detail là VĐV *và* người xem KHÔNG phải VĐV (giữ nguyên quy tắc hiện tại) */}
 			{detailIsAthlete &&
 				!viewerIsAthlete &&
 				(isDesktop ? (
