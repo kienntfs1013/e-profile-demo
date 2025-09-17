@@ -51,6 +51,16 @@ export type PagedListResponse<T> = ListResponse<T> & {
 const DEFAULT_PAGE_LIMIT = 25;
 const USER_CACHE_TTL_MS = 30_000;
 
+function getAccessToken(): string | null {
+	try {
+		if (typeof window === "undefined") return null;
+		const raw = localStorage.getItem("eprofile_access_token");
+		return raw || null;
+	} catch {
+		return null;
+	}
+}
+
 export function buildImageUrl(path?: string): string | undefined {
 	if (!path) return undefined;
 	const base = process.env.NEXT_PUBLIC_EPROFILE_API || "https://api-eprofile.pickleballplus.vn";
@@ -321,10 +331,12 @@ export async function deleteUser(id: number): Promise<{ ok: boolean; message?: s
 	return { ok: data.status === "success", message: data.message };
 }
 
-export async function sha256Hex(input: string): Promise<string> {
-	const enc = new TextEncoder().encode(input);
-	const buf = await crypto.subtle.digest("SHA-256", enc);
-	return Array.from(new Uint8Array(buf))
-		.map((b) => b.toString(16).padStart(2, "0"))
-		.join("");
+export async function changePassword(userId: number, oldpassword: string, newpassword: string): Promise<void> {
+	const token = getAccessToken();
+	const { data } = await api.post<{ status: "success" | "error"; message?: string }>(
+		"/api/change_password",
+		{ oldpassword, newpassword, user_id: userId },
+		token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+	);
+	if (data.status !== "success") throw new Error(data.message || "Đổi mật khẩu thất bại");
 }

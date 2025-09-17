@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { uploadFile } from "@/services/upload.service";
 import {
 	buildImageUrl,
+	changePassword,
 	fetchAthleteByUserId,
 	getLoggedInUserId,
 	getUserById,
@@ -14,7 +15,7 @@ import {
 	mapSportToVN,
 	parseRoleToInt,
 	roleLabelFromInt,
-	sha256Hex,
+	updateUserByIdMerged,
 	type AthleteDTO,
 } from "@/services/user.service";
 import Alert from "@mui/material/Alert";
@@ -35,8 +36,6 @@ import OutlinedInput from "@mui/material/OutlinedInput";
 import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
-
-import { authClient } from "@/lib/auth/client";
 
 const nations = [{ value: "VIE", label: "Việt Nam" }] as const;
 const sports = [
@@ -92,7 +91,8 @@ export default function Page(): React.JSX.Element {
 	const searchParams = useSearchParams();
 
 	const [loading, setLoading] = React.useState(true);
-	const [saving, setSaving] = React.useState(false);
+	const [savingProfile, setSavingProfile] = React.useState(false);
+	const [changingPwd, setChangingPwd] = React.useState(false);
 	const [fetchError, setFetchError] = React.useState<string | null>(null);
 	const [toast, setToast] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -312,11 +312,10 @@ export default function Page(): React.JSX.Element {
 		setRemovedAvatar(true);
 	};
 
-	const handleSave = async () => {
+	const handleSaveProfile = async () => {
 		try {
-			setSaving(true);
+			setSavingProfile(true);
 			setToast(null);
-			setPwdError(null);
 
 			const userId = resolveUserId();
 			if (!userId) {
@@ -346,29 +345,6 @@ export default function Page(): React.JSX.Element {
 				return;
 			}
 
-			if (pwd.current || pwd.next || pwd.next2) {
-				if (!pwd.current || !pwd.next || !pwd.next2) {
-					setPwdError("Vui lòng nhập đủ thông tin đổi mật khẩu");
-					return;
-				}
-				if (pwd.next.length < 6) {
-					setPwdError("Mật khẩu mới phải có ít nhất 6 ký tự");
-					return;
-				}
-				if (pwd.next !== pwd.next2) {
-					setPwdError("Mật khẩu mới nhập lại không khớp");
-					return;
-				}
-				const res = await authClient.signInWithPassword({
-					email: current.email || form.email,
-					password: pwd.current,
-				});
-				if (res.error) {
-					setPwdError("Mật khẩu hiện tại không đúng");
-					return;
-				}
-			}
-
 			const nextProfilePath = removedAvatar ? "" : (uploadedAvatarPath ?? current.profile_picture_path);
 
 			const payload: any = {
@@ -391,42 +367,65 @@ export default function Page(): React.JSX.Element {
 				is_active: current.is_active ?? 1,
 			};
 
-			if (pwd.current || pwd.next || pwd.next2) {
-				const nextHash = await sha256Hex(pwd.next);
-				payload.password = nextHash;
-			}
+			await updateUserByIdMerged(userId, payload);
 
-			await (await import("@/services/user.service")).updateUserByIdMerged(userId, payload);
-
-			if (pwd.current || pwd.next || pwd.next2) {
-				const reLogin = await authClient.signInWithPassword({
-					email: form.email || current.email,
-					password: pwd.next,
-				});
-				if (reLogin.error) {
-					setToast({ type: "error", message: "Đổi mật khẩu thất bại" });
-					return;
-				}
-			}
-
-			setFetchError(null);
 			setToast({ type: "success", message: "Đã lưu thay đổi" });
 
 			if (typeof window !== "undefined") {
-				window.setTimeout(() => {
-					window.location.reload();
-				}, 350);
+				window.setTimeout(() => window.location.reload(), 350);
 			} else {
 				router.refresh();
 			}
 		} catch (e: any) {
 			const msg = e?.response?.data?.message || e?.message || "Lỗi kết nối Cơ Sở Dữ Liệu";
+			setToast({ type: "error", message: msg });
+		} finally {
+			setSavingProfile(false);
+		}
+	};
+
+	const handleChangePassword = async () => {
+		try {
+			setChangingPwd(true);
+			setPwdError(null);
+			setToast(null);
+
+			const userId = resolveUserId();
+			if (!userId) {
+				setToast({ type: "error", message: "Không xác định được ID người dùng" });
+				return;
+			}
+			if (!pwd.current || !pwd.next || !pwd.next2) {
+				setPwdError("Vui lòng nhập đủ thông tin đổi mật khẩu");
+				return;
+			}
+			if (pwd.next.length < 6) {
+				setPwdError("Mật khẩu mới phải có ít nhất 6 ký tự");
+				return;
+			}
+			if (pwd.next !== pwd.next2) {
+				setPwdError("Mật khẩu mới nhập lại không khớp");
+				return;
+			}
+
+			await changePassword(userId, pwd.current, pwd.next);
+
+			setToast({ type: "success", message: "Đổi mật khẩu thành công" });
+			setPwd({ current: "", next: "", next2: "" });
+
+			if (typeof window !== "undefined") {
+				window.setTimeout(() => window.location.reload(), 350);
+			} else {
+				router.refresh();
+			}
+		} catch (e: any) {
+			const msg = e?.response?.data?.message || e?.message || "Đổi mật khẩu thất bại";
 			if (String(msg).toLowerCase().includes("mật khẩu") || String(msg).toLowerCase().includes("password")) {
 				setPwdError(msg);
 			}
 			setToast({ type: "error", message: msg });
 		} finally {
-			setSaving(false);
+			setChangingPwd(false);
 		}
 	};
 
@@ -674,6 +673,17 @@ export default function Page(): React.JSX.Element {
 								</Box>
 							</Stack>
 
+							<Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+								<Button
+									variant="contained"
+									type="button"
+									disabled={savingProfile || uploadingAvatar || emailExists || phoneExists}
+									onClick={handleSaveProfile}
+								>
+									{savingProfile ? "Đang lưu..." : "Lưu thông tin"}
+								</Button>
+							</Box>
+
 							<Divider textAlign="left">Đổi mật khẩu</Divider>
 
 							<Stack
@@ -718,20 +728,15 @@ export default function Page(): React.JSX.Element {
 									</FormControl>
 								</Box>
 							</Stack>
+
+							<Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+								<Button variant="contained" type="button" disabled={changingPwd} onClick={handleChangePassword}>
+									{changingPwd ? "Đang đổi..." : "Lưu mật khẩu"}
+								</Button>
+							</Box>
 						</Stack>
 					)}
 				</CardContent>
-				<Divider />
-				<CardActions sx={{ justifyContent: "flex-end" }}>
-					<Button
-						variant="contained"
-						type="button"
-						disabled={saving || uploadingAvatar || emailExists || phoneExists}
-						onClick={handleSave}
-					>
-						{saving ? "Đang lưu..." : "Lưu thay đổi"}
-					</Button>
-				</CardActions>
 			</Card>
 
 			{toast ? (
