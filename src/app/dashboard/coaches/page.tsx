@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { buildImageUrl, listUsersPage, type UserDTO } from "@/services/user.service";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
@@ -17,9 +16,7 @@ import TableHead from "@mui/material/TableHead";
 import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
-import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { Eye } from "@phosphor-icons/react/dist/ssr/Eye";
 
 type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
 const DEFAULT_ORDER = "id-asc";
@@ -90,6 +87,7 @@ export default function CustomersPage(): React.JSX.Element {
 
 	const [search, setSearch] = React.useState("");
 	const [sport, setSport] = React.useState<"all" | SportCode>("all");
+	const [genderFilter, setGenderFilter] = React.useState<"all" | "Nam" | "Nữ" | "Khác" | "-">("all");
 	const [sortName, setSortName] = React.useState<"asc" | "desc">("asc");
 
 	const [page, setPage] = React.useState(0);
@@ -128,6 +126,7 @@ export default function CustomersPage(): React.JSX.Element {
 
 				const filtered = onlyCoaches.filter((u) => {
 					const okSport = sport === "all" ? true : normalizeSport(u.sport) === sport;
+					const okGender = genderFilter === "all" ? true : normalizeGender((u as any).gender) === genderFilter;
 					const okQ = searchDeferred
 						? [fullName(u), u.email, u.phoneNumber]
 								.filter(Boolean)
@@ -135,7 +134,7 @@ export default function CustomersPage(): React.JSX.Element {
 								.toLowerCase()
 								.includes(searchDeferred.toLowerCase())
 						: true;
-					return okSport && okQ;
+					return okSport && okGender && okQ;
 				});
 
 				filtered.sort((a, b) =>
@@ -153,7 +152,7 @@ export default function CustomersPage(): React.JSX.Element {
 				if (reqIdRef.current === myReq) setLoading(false);
 			}
 		},
-		[searchDeferred, sport, sortName]
+		[searchDeferred, sport, genderFilter, sortName]
 	);
 
 	React.useEffect(() => {
@@ -162,7 +161,7 @@ export default function CustomersPage(): React.JSX.Element {
 
 	React.useEffect(() => {
 		setPage(0);
-	}, [searchDeferred, sport, sortName]);
+	}, [searchDeferred, sport, genderFilter, sortName]);
 
 	const goDetail = (id: string) => router.push(`/dashboard/customers/${id}`);
 
@@ -207,6 +206,22 @@ export default function CustomersPage(): React.JSX.Element {
 							select
 							fullWidth
 							size="small"
+							label="Giới tính"
+							value={genderFilter}
+							onChange={(e) => setGenderFilter(e.target.value as typeof genderFilter)}
+						>
+							<MenuItem value="all">Tất cả</MenuItem>
+							<MenuItem value="Nam">Nam</MenuItem>
+							<MenuItem value="Nữ">Nữ</MenuItem>
+							<MenuItem value="Khác">Khác</MenuItem>
+						</TextField>
+					</Box>
+
+					<Box sx={{ width: { xs: "100%", sm: 220 } }}>
+						<TextField
+							select
+							fullWidth
+							size="small"
 							label="Sắp xếp theo tên"
 							value={sortName}
 							onChange={(e) => setSortName(e.target.value as "asc" | "desc")}
@@ -224,10 +239,11 @@ export default function CustomersPage(): React.JSX.Element {
 						<TableHead>
 							<TableRow>
 								<TableCell>Huấn luyện viên</TableCell>
-								<TableCell align="center">Bộ môn</TableCell>
-								<TableCell>Quốc gia</TableCell>
 								<TableCell align="center">Giới tính</TableCell>
 								<TableCell align="center">Tuổi</TableCell>
+								<TableCell align="center">Email</TableCell>
+								<TableCell align="center">SĐT</TableCell>
+								<TableCell align="center">Quốc gia</TableCell>
 							</TableRow>
 						</TableHead>
 
@@ -257,15 +273,15 @@ export default function CustomersPage(): React.JSX.Element {
 											</Stack>
 										</TableCell>
 
-										<TableCell align="center">{labelSport(row.sport || "")}</TableCell>
-
-										<TableCell>
-											<Typography variant="body2">{row.country || "-"}</Typography>
-										</TableCell>
-
 										<TableCell align="center">{row.gender ?? "-"}</TableCell>
 
 										<TableCell align="center">{row.age ?? "-"}</TableCell>
+
+										<TableCell align="center">{row.email || "-"}</TableCell>
+
+										<TableCell align="center">{row.phone || "-"}</TableCell>
+
+										<TableCell align="center">{row.country || "-"}</TableCell>
 									</TableRow>
 								))
 							) : (
