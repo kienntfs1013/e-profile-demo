@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { users, type User } from "@/models/user";
+import { fetchUserByIdFromList, getLoggedInUserId, getUserById, type UserDTO } from "@/services/user.service";
 import Avatar from "@mui/material/Avatar";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -33,8 +33,8 @@ function splitVNName(full = "") {
 	return { lastName, firstName: rest.join(" ") };
 }
 
-function toNation(u?: User) {
-	if (u?.address?.country === "VN") return "VIE";
+function toNation(u?: UserDTO) {
+	if ((u as any)?.address?.country === "VN") return "VIE";
 	return "";
 }
 
@@ -42,21 +42,39 @@ export default function Page(): React.JSX.Element {
 	const router = useRouter();
 	const search = useSearchParams();
 	const id = search.get("id") ?? "";
+	const [athlete, setAthlete] = React.useState<UserDTO | null>(null);
 
-	const athlete: User | undefined = React.useMemo(() => (id ? users.find((u) => u.id === id) : undefined), [id]);
+	React.useEffect(() => {
+		let cancelled = false;
+		(async () => {
+			const targetId = id || getLoggedInUserId?.();
+			if (!targetId) return;
+			try {
+				const user =
+					(await getUserById(Number(targetId)).catch(() => null)) ??
+					(await fetchUserByIdFromList(Number(targetId)).catch(() => null));
+				if (!cancelled) setAthlete((user as any) ?? null);
+			} catch {
+				if (!cancelled) setAthlete(null);
+			}
+		})();
+		return () => {
+			cancelled = true;
+		};
+	}, [id]);
 
 	const defaults = React.useMemo(() => {
-		const { lastName, firstName } = splitVNName(athlete?.name ?? "");
+		const { lastName, firstName } = splitVNName((athlete as any)?.name ?? "");
 		return {
-			avatar: athlete?.avatar || undefined,
+			avatar: (athlete as any)?.avatar || undefined,
 			lastName,
 			firstName,
 			email: athlete?.email ?? "",
-			phone: athlete?.phone ?? "",
-			nation: toNation(athlete),
+			phone: (athlete as any)?.phone ?? (athlete as any)?.phoneNumber ?? "",
+			nation: toNation(athlete ?? undefined),
 			gender: athlete?.gender ?? "",
 			birthday: athlete?.birthday ?? "",
-			sport: athlete?.sport ?? "",
+			sport: (athlete as any)?.sport ?? "",
 		};
 	}, [athlete]);
 

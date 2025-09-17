@@ -2,6 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { addAssignment as addAthleteCoachAssignment } from "@/services/athleteCoachAssignments.service";
+import { addManagementCoachAssignment } from "@/services/managementCoachAssignments.service";
 import { uploadFile } from "@/services/upload.service";
 import {
 	getLoggedInUserId,
@@ -9,6 +11,7 @@ import {
 	mapGenderToVN,
 	mapNationToCountry,
 	mapSportToVN,
+	normalizeSport,
 	registerUser,
 	roleLabelFromInt,
 } from "@/services/user.service";
@@ -73,6 +76,7 @@ export default function Page(): React.JSX.Element {
 	const [emailChecking, setEmailChecking] = React.useState(false);
 	const [phoneChecking, setPhoneChecking] = React.useState(false);
 	const [viewerRole, setViewerRole] = React.useState<number | null>(null);
+	const [viewerSport, setViewerSport] = React.useState<"" | "shooting" | "archery" | "taekwondo" | "boxing">("");
 
 	const [form, setForm] = React.useState<FormState>({
 		firstName: "",
@@ -125,19 +129,24 @@ export default function Page(): React.JSX.Element {
 					.then((r) => r?.[0])
 					.catch(() => null);
 				if (me?.role != null) setViewerRole(Number(me.role));
+				const coachSport = normalizeSport(me?.sport || "");
+				setViewerSport(coachSport);
+				if (Number(me?.role) === 2 && coachSport) {
+					setForm((p) => ({ ...p, sport: coachSport, role: 1 }));
+				}
 			} catch {}
 		})();
 	}, []);
 
 	React.useEffect(() => {
 		if (viewerRole === 2) {
-			setForm((p) => ({ ...p, role: 1 }));
+			setForm((p) => ({ ...p, role: 1, sport: viewerSport || p.sport }));
 		} else if (viewerRole === 3) {
 			setForm((p) => ({ ...p, role: p.role === 1 || p.role === 2 ? p.role : 1 }));
 		} else if (viewerRole === 4) {
 			setForm((p) => ({ ...p, role: p.role === 1 || p.role === 2 || p.role === 3 ? p.role : 3 }));
 		}
-	}, [viewerRole]);
+	}, [viewerRole, viewerSport]);
 
 	const allowedRoles = React.useMemo<Array<1 | 2 | 3>>(() => {
 		if (viewerRole === 3) return [1, 2];
@@ -223,6 +232,7 @@ export default function Page(): React.JSX.Element {
 			setToast(null);
 
 			const effectiveRole: 1 | 2 | 3 = viewerRole === 2 ? 1 : (form.role as 1 | 2 | 3);
+			const effectiveSport = viewerRole === 2 ? viewerSport || form.sport : form.sport;
 
 			const res = await registerUser({
 				firstName: form.firstName,
@@ -233,7 +243,7 @@ export default function Page(): React.JSX.Element {
 				role: effectiveRole,
 				gender: mapGenderToVN(form.gender),
 				birthday: form.birthday || undefined,
-				sport: mapSportToVN(form.sport),
+				sport: mapSportToVN(effectiveSport),
 				country: mapNationToCountry(form.nation),
 				address: form.address || undefined,
 				district: form.district || undefined,
@@ -244,6 +254,18 @@ export default function Page(): React.JSX.Element {
 			if (!res.ok || !res.id) {
 				setToast({ type: "error", message: res.message || "Tạo người dùng thất bại" });
 				return;
+			}
+
+			const viewerId = getLoggedInUserId?.() ?? null;
+			if (viewerId && viewerRole === 2) {
+				try {
+					await addAthleteCoachAssignment({ athlete_id: res.id, coach_id: viewerId });
+				} catch {}
+			}
+			if (viewerId && viewerRole === 3) {
+				try {
+					await addManagementCoachAssignment({ manager_id: viewerId, coach_id: res.id });
+				} catch {}
 			}
 
 			setToast({ type: "success", message: "Tạo người dùng thành công" });
@@ -436,11 +458,11 @@ export default function Page(): React.JSX.Element {
 								</FormControl>
 							</Box>
 							<Box className="field">
-								<FormControl fullWidth required>
+								<FormControl fullWidth required disabled={viewerRole === 2}>
 									<InputLabel>Bộ môn</InputLabel>
 									<Select
 										label="Bộ môn"
-										value={form.sport}
+										value={viewerRole === 2 ? viewerSport || form.sport : form.sport}
 										onChange={(e) => change("sport", e.target.value as FormState["sport"])}
 									>
 										<MenuItem value="" disabled>

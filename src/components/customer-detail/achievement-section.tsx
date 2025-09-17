@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { User } from "@/models/user";
 import {
 	deleteArcheryCompetitionById,
 	deleteBoxingCompetitionById,
@@ -17,6 +16,7 @@ import {
 	type ShootingCompetitionDTO,
 	type TaekwondoCompetitionDTO,
 } from "@/services/competition.service";
+import { fetchUserByIdFromList, getLoggedInUserId, getUserById, type UserDTO } from "@/services/user.service";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -85,8 +85,35 @@ function parseResult(v?: string) {
 	return v;
 }
 
-export function AchievementSection({ user }: { user: User }) {
+type ExtraUserFields = { id?: number | string; user_id?: number | string; sport?: string };
+
+export function AchievementSection({ id }: { id?: number | string }) {
 	const router = useRouter();
+
+	const [user, setUser] = React.useState<(UserDTO & ExtraUserFields) | null>(null);
+
+	React.useEffect(() => {
+		let off = false;
+		(async () => {
+			const viewerId = getLoggedInUserId?.();
+			const targetId = id != null && !Number.isNaN(Number(id)) ? Number(id) : viewerId || undefined;
+			if (!targetId) {
+				if (!off) setUser(null);
+				return;
+			}
+			try {
+				const u =
+					(await getUserById(targetId).catch(() => null)) ?? (await fetchUserByIdFromList(targetId).catch(() => null));
+				if (!off) setUser((u as any) ?? null);
+			} catch {
+				if (!off) setUser(null);
+			}
+		})();
+		return () => {
+			off = true;
+		};
+	}, [id]);
+
 	const [sort, setSort] = React.useState<"newest" | "oldest">("newest");
 	const [search, setSearch] = React.useState<string>("");
 	const [date, setDate] = React.useState<string>("");

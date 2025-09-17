@@ -296,9 +296,9 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 			<SectionCard>
 				{tab === "general" && <GeneralSection id={user.id} />}
 
-				{detailIsAthlete && !viewerIsAthlete && tab === "health" && <HealthSection user={user as any} />}
-				{detailIsAthlete && !viewerIsAthlete && tab === "training" && <TrainingSection user={user as any} />}
-				{detailIsAthlete && !viewerIsAthlete && tab === "achievement" && <AchievementSection user={user as any} />}
+				{detailIsAthlete && !viewerIsAthlete && tab === "health" && <HealthSection id={user.id} />}
+				{detailIsAthlete && !viewerIsAthlete && tab === "training" && <TrainingSection id={user.id} />}
+				{detailIsAthlete && !viewerIsAthlete && tab === "achievement" && <AchievementSection id={user.id} />}
 
 				{isPending && (
 					<Box mt={2} color="text.secondary">

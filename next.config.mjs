@@ -13,6 +13,15 @@ const nextConfig = {
 	compiler: {
 		removeConsole: isProd ? { exclude: ["error", "warn"] } : undefined,
 	},
+
+	async rewrites() {
+		return [
+			{
+				source: "/gocare/:path*",
+				destination: "https://portal.gocare.vn/api/:path*",
+			},
+		];
+	},
 };
 
 export default nextConfig;
