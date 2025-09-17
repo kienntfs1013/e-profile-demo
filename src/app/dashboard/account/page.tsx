@@ -14,6 +14,7 @@ import {
 	mapSportToVN,
 	parseRoleToInt,
 	roleLabelFromInt,
+	sha256Hex,
 	type AthleteDTO,
 } from "@/services/user.service";
 import Alert from "@mui/material/Alert";
@@ -34,6 +35,8 @@ import OutlinedInput from "@mui/material/OutlinedInput";
 import Select from "@mui/material/Select";
 import Snackbar from "@mui/material/Snackbar";
 import Stack from "@mui/material/Stack";
+
+import { authClient } from "@/lib/auth/client";
 
 const nations = [{ value: "VIE", label: "Việt Nam" }] as const;
 const sports = [
@@ -121,6 +124,13 @@ export default function Page(): React.JSX.Element {
 	const [phoneExists, setPhoneExists] = React.useState(false);
 	const [emailChecking, setEmailChecking] = React.useState(false);
 	const [phoneChecking, setPhoneChecking] = React.useState(false);
+
+	const [pwd, setPwd] = React.useState<{ current: string; next: string; next2: string }>({
+		current: "",
+		next: "",
+		next2: "",
+	});
+	const [pwdError, setPwdError] = React.useState<string | null>(null);
 
 	const fileRef = React.useRef<HTMLInputElement>(null);
 	const onPickFile = () => fileRef.current?.click();
@@ -306,6 +316,7 @@ export default function Page(): React.JSX.Element {
 		try {
 			setSaving(true);
 			setToast(null);
+			setPwdError(null);
 
 			const userId = resolveUserId();
 			if (!userId) {
@@ -335,9 +346,32 @@ export default function Page(): React.JSX.Element {
 				return;
 			}
 
+			if (pwd.current || pwd.next || pwd.next2) {
+				if (!pwd.current || !pwd.next || !pwd.next2) {
+					setPwdError("Vui lòng nhập đủ thông tin đổi mật khẩu");
+					return;
+				}
+				if (pwd.next.length < 6) {
+					setPwdError("Mật khẩu mới phải có ít nhất 6 ký tự");
+					return;
+				}
+				if (pwd.next !== pwd.next2) {
+					setPwdError("Mật khẩu mới nhập lại không khớp");
+					return;
+				}
+				const res = await authClient.signInWithPassword({
+					email: current.email || form.email,
+					password: pwd.current,
+				});
+				if (res.error) {
+					setPwdError("Mật khẩu hiện tại không đúng");
+					return;
+				}
+			}
+
 			const nextProfilePath = removedAvatar ? "" : (uploadedAvatarPath ?? current.profile_picture_path);
 
-			const payload = {
+			const payload: any = {
 				firstName: form.firstName,
 				lastName: form.lastName,
 				email: form.email,
@@ -357,7 +391,23 @@ export default function Page(): React.JSX.Element {
 				is_active: current.is_active ?? 1,
 			};
 
-			await (await import("@/services/user.service")).updateUserByIdMerged(userId, payload as any);
+			if (pwd.current || pwd.next || pwd.next2) {
+				const nextHash = await sha256Hex(pwd.next);
+				payload.password = nextHash;
+			}
+
+			await (await import("@/services/user.service")).updateUserByIdMerged(userId, payload);
+
+			if (pwd.current || pwd.next || pwd.next2) {
+				const reLogin = await authClient.signInWithPassword({
+					email: form.email || current.email,
+					password: pwd.next,
+				});
+				if (reLogin.error) {
+					setToast({ type: "error", message: "Đổi mật khẩu thất bại" });
+					return;
+				}
+			}
 
 			setFetchError(null);
 			setToast({ type: "success", message: "Đã lưu thay đổi" });
@@ -371,6 +421,9 @@ export default function Page(): React.JSX.Element {
 			}
 		} catch (e: any) {
 			const msg = e?.response?.data?.message || e?.message || "Lỗi kết nối Cơ Sở Dữ Liệu";
+			if (String(msg).toLowerCase().includes("mật khẩu") || String(msg).toLowerCase().includes("password")) {
+				setPwdError(msg);
+			}
 			setToast({ type: "error", message: msg });
 		} finally {
 			setSaving(false);
@@ -381,7 +434,7 @@ export default function Page(): React.JSX.Element {
 		<Stack spacing={3} sx={{ width: "100%" }}>
 			<Card sx={{ width: "100%" }}>
 				<CardHeader title="Thông tin hồ sơ" />
-				<Divider />
+				<Divider textAlign="left">Thông tin chung</Divider>
 				<CardContent>
 					{loading ? (
 						<LinearProgress />
@@ -617,6 +670,51 @@ export default function Page(): React.JSX.Element {
 											value={form.passport_expiry_date || ""}
 											onChange={(e) => change("passport_expiry_date", e.target.value)}
 										/>
+									</FormControl>
+								</Box>
+							</Stack>
+
+							<Divider textAlign="left">Đổi mật khẩu</Divider>
+
+							<Stack
+								direction="row"
+								spacing={2}
+								useFlexGap
+								flexWrap="wrap"
+								sx={{ "& > .field": { flex: "1 1 320px", minWidth: 260 } }}
+							>
+								<Box className="field">
+									<FormControl fullWidth>
+										<InputLabel>Mật khẩu hiện tại</InputLabel>
+										<OutlinedInput
+											type="password"
+											label="Mật khẩu hiện tại"
+											value={pwd.current}
+											onChange={(e) => setPwd((p) => ({ ...p, current: e.target.value }))}
+										/>
+									</FormControl>
+								</Box>
+								<Box className="field">
+									<FormControl fullWidth>
+										<InputLabel>Mật khẩu mới</InputLabel>
+										<OutlinedInput
+											type="password"
+											label="Mật khẩu mới"
+											value={pwd.next}
+											onChange={(e) => setPwd((p) => ({ ...p, next: e.target.value }))}
+										/>
+									</FormControl>
+								</Box>
+								<Box className="field">
+									<FormControl fullWidth error={Boolean(pwdError)}>
+										<InputLabel>Nhập lại mật khẩu mới</InputLabel>
+										<OutlinedInput
+											type="password"
+											label="Nhập lại mật khẩu mới"
+											value={pwd.next2}
+											onChange={(e) => setPwd((p) => ({ ...p, next2: e.target.value }))}
+										/>
+										{pwdError ? <FormHelperText>{pwdError}</FormHelperText> : null}
 									</FormControl>
 								</Box>
 							</Stack>

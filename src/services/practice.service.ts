@@ -57,7 +57,7 @@ export type PagedListResponse<T> = {
 	message?: string;
 	data: T[];
 	total?: number;
-	page?: number; // 1-based
+	page?: number;
 	totalpage?: number;
 };
 

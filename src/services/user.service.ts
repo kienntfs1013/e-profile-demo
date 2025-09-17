@@ -1,6 +1,5 @@
 import { api } from "@/lib/api/client";
 
-/* ========= Types ========= */
 export type UserDTO = {
 	id: number;
 	email: string;
@@ -49,11 +48,9 @@ export type PagedListResponse<T> = ListResponse<T> & {
 	link?: string;
 };
 
-/* ========= Config ========= */
 const DEFAULT_PAGE_LIMIT = 25;
 const USER_CACHE_TTL_MS = 30_000;
 
-/* ========= Utils ========= */
 export function buildImageUrl(path?: string): string | undefined {
 	if (!path) return undefined;
 	const base = process.env.NEXT_PUBLIC_EPROFILE_API || "https://api-eprofile.pickleballplus.vn";
@@ -64,7 +61,7 @@ export function buildImageUrl(path?: string): string | undefined {
 
 export function getLoggedInUserId(): number | null {
 	try {
-		if (typeof window === "undefined") return null; // SSR guard
+		if (typeof window === "undefined") return null;
 		const raw = localStorage.getItem("eprofile_user");
 		if (!raw) return null;
 		const obj = JSON.parse(raw) as { user_id?: number; id?: number };
@@ -160,14 +157,6 @@ export async function listUsers(
 	return data.data;
 }
 
-/**
- * Lấy 1 trang người dùng từ API (có meta total/totalpage).
- * @param page – số trang bắt đầu từ 1
- * @param filters – bộ lọc tùy ý
- * @param orderby – ví dụ: "id-asc" | "id-desc"
- * @param limit – nếu API hỗ trợ (ví dụ limit=10/25/100)
- * @param signal – AbortSignal để hủy request khi đổi filter nhanh
- */
 export async function listUsersPage(
 	page = 1,
 	filters?: Record<string, string | number | boolean | undefined>,
@@ -177,8 +166,7 @@ export async function listUsersPage(
 ): Promise<PagedListResponse<UserDTO>> {
 	const params = toQuery(filters, orderby);
 	params.append("page", String(page));
-	if (limit !== undefined && limit !== null) params.append("limit", String(limit)); // nếu BE hỗ trợ
-
+	if (limit !== undefined && limit !== null) params.append("limit", String(limit));
 	const qs = params.toString();
 	const url = qs ? `/api/Users?${qs}` : "/api/Users";
 	const { data } = await api.get<PagedListResponse<UserDTO>>(url, { signal });
@@ -186,10 +174,6 @@ export async function listUsersPage(
 	return data;
 }
 
-/**
- * Lấy toàn bộ người dùng bằng cách gọi từng trang rồi gộp lại.
- * Dùng cho export dữ liệu hoặc đồng bộ nền.
- */
 export async function listAllUsers(
 	filters?: Record<string, string | number | boolean | undefined>,
 	orderby?: string
@@ -197,7 +181,6 @@ export async function listAllUsers(
 	const first = await listUsersPage(1, filters, orderby, DEFAULT_PAGE_LIMIT);
 	const totalpage = Math.max(1, first.totalpage ?? 1);
 	const out: UserDTO[] = [...first.data];
-
 	for (let p = 2; p <= totalpage; p += 1) {
 		const res = await listUsersPage(p, filters, orderby, DEFAULT_PAGE_LIMIT);
 		out.push(...res.data);
@@ -205,14 +188,12 @@ export async function listAllUsers(
 	return out;
 }
 
-/* ========= Users – helpers ========= */
 export async function fetchUserByIdFromList(id: number): Promise<UserDTO | null> {
 	const { data } = await api.get<ListResponse<UserDTO>>("/api/Users?orderby=id-asc");
 	if (data.status !== "success") throw new Error(data.message || "Fetch Users failed");
 	return data.data.find((u) => u.id === id) ?? null;
 }
 
-/** Cache nhẹ cho getUserById để giảm lặp request trong cùng màn hình */
 const _userCache = new Map<number, { at: number; data: UserDTO | null }>();
 
 export async function getUserById(
@@ -224,7 +205,6 @@ export async function getUserById(
 		const hit = _userCache.get(id);
 		if (hit && Date.now() - hit.at < USER_CACHE_TTL_MS) return hit.data;
 	}
-
 	const { data } = await api.get<ItemResponse<UserDTO>>(`/api/Users/${id}`, { signal: opts?.signal });
 	const ok = data.status === "success";
 	const val = ok ? data.data : null;
@@ -232,14 +212,12 @@ export async function getUserById(
 	return val;
 }
 
-/* ========= Athletes ========= */
 export async function fetchAthleteByUserId(userId: number): Promise<AthleteDTO | null> {
 	const { data } = await api.get<ListResponse<AthleteDTO>>(`/api/Athletes?user_id=${encodeURIComponent(userId)}`);
 	if (data.status !== "success") throw new Error(data.message || "Fetch Athletes failed");
 	return data.data[0] ?? null;
 }
 
-/* ========= Mapping helpers ========= */
 export function mapNationToCountry(nationCode: string): string | undefined {
 	if (nationCode === "VIE") return "Việt Nam";
 	return undefined;
@@ -275,7 +253,6 @@ export function roleLabelFromInt(v: 1 | 2): string {
 	return v === 1 ? "Vận động viên" : "Huấn luyện viên";
 }
 
-/* ========= Mutations ========= */
 export async function registerUser(
 	payload: {
 		email: string;
@@ -330,12 +307,10 @@ export async function updateUserByIdMerged(
 	let current = await getUserById(userId);
 	if (!current) current = await fetchUserByIdFromList(userId);
 	if (!current) throw new Error("Không tìm thấy người dùng");
-
 	const merged: Record<string, any> = { ...current, ...patch };
 	delete merged.id;
 	delete merged.created_at;
 	delete merged.updated_at;
-
 	const body = compact(merged);
 	const { data } = await api.put<{ status: "success" | "error"; message?: string }>(`/api/Users/${userId}`, body);
 	if (data?.status !== "success") throw new Error(data?.message || "Cập nhật thất bại");
@@ -344,4 +319,12 @@ export async function updateUserByIdMerged(
 export async function deleteUser(id: number): Promise<{ ok: boolean; message?: string }> {
 	const { data } = await api.delete<{ status: "success" | "error"; message?: string }>(`/api/Users/${id}`);
 	return { ok: data.status === "success", message: data.message };
+}
+
+export async function sha256Hex(input: string): Promise<string> {
+	const enc = new TextEncoder().encode(input);
+	const buf = await crypto.subtle.digest("SHA-256", enc);
+	return Array.from(new Uint8Array(buf))
+		.map((b) => b.toString(16).padStart(2, "0"))
+		.join("");
 }

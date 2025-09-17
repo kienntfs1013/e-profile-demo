@@ -2,7 +2,11 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { buildImageUrl, deleteUser, getLoggedInUserId, listUsersPage, type UserDTO } from "@/services/user.service";
+import {
+	deleteAssignmentById,
+	listAssignments as listAthleteCoachAssignments,
+} from "@/services/athleteCoachAssignments.service";
+import { buildImageUrl, deleteUser, getLoggedInUserId, listAllUsers, type UserDTO } from "@/services/user.service";
 import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
@@ -33,7 +37,6 @@ import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 
 type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
-const DEFAULT_ORDER = "id-asc";
 const visibleColCount = 7;
 
 function isAthlete(u: UserDTO): boolean {
@@ -109,7 +112,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 
 	const [q, setQ] = React.useState("");
 	const [status, setStatus] = React.useState<"all" | "active" | "paused">("all");
-	const [sport, setSport] = React.useState<"all" | SportCode>("all");
+	const [genderFilter, setGenderFilter] = React.useState<"all" | "Nam" | "Nữ" | "Khác" | "-">("all");
 
 	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(10);
@@ -119,8 +122,8 @@ export default function AthletesManagementPage(): React.JSX.Element {
 	const [deleting, setDeleting] = React.useState(false);
 
 	const qDeferred = React.useDeferredValue(q);
-
 	const reqIdRef = React.useRef(0);
+	const [assignedAthleteIds, setAssignedAthleteIds] = React.useState<number[] | null>(null);
 
 	const mapToRow = (u: UserDTO): Row => ({
 		id: String(u.id),
@@ -134,25 +137,48 @@ export default function AthletesManagementPage(): React.JSX.Element {
 		gender: normalizeGender((u as any).gender),
 	});
 
+	const fetchAssignedIds = React.useCallback(async (): Promise<number[]> => {
+		const coachUserId = getLoggedInUserId?.() ?? null;
+		if (!coachUserId) return [];
+		const asgs = await listAthleteCoachAssignments({ coach_id: coachUserId });
+		const ids = asgs.map((a) => Number(a.athlete_id)).filter((n) => Number.isFinite(n));
+		return Array.from(new Set(ids));
+	}, []);
+
 	const fetchPage = React.useCallback(
 		async (uiPage: number, pageSize: number) => {
 			const myReq = ++reqIdRef.current;
 			try {
 				setLoading(true);
 
+				let ids = assignedAthleteIds ?? [];
+				if (assignedAthleteIds === null) {
+					ids = await fetchAssignedIds();
+					if (reqIdRef.current !== myReq) return;
+					setAssignedAthleteIds(ids);
+				}
+
+				if (!ids.length) {
+					setRows([]);
+					setTotal(0);
+					return;
+				}
+
 				const filters: Record<string, any> = { role: 1 };
 				if (status !== "all") filters.is_active = status === "active" ? 1 : 0;
 
-				const res = await listUsersPage(uiPage + 1, filters, DEFAULT_ORDER, pageSize);
+				const allUsers = await listAllUsers(filters);
 
 				if (reqIdRef.current !== myReq) return;
 
 				const viewerId = getLoggedInUserId?.();
-				const base = viewerId != null ? res.data.filter((u) => Number(u.id) !== Number(viewerId)) : res.data;
+				const base = viewerId != null ? allUsers.filter((u) => Number(u.id) !== Number(viewerId)) : allUsers;
 
 				const onlyAthletes = base.filter(isAthlete);
-				const clientFiltered = onlyAthletes.filter((u) => {
-					const okSport = sport === "all" ? true : normalizeSport(u.sport) === sport;
+				const assignedOnly = onlyAthletes.filter((u) => ids.includes(Number(u.id)));
+
+				const clientFiltered = assignedOnly.filter((u) => {
+					const okGender = genderFilter === "all" ? true : normalizeGender((u as any).gender) === genderFilter;
 					const okQ = qDeferred
 						? [fullName(u), u.email, u.phoneNumber]
 								.filter(Boolean)
@@ -160,19 +186,21 @@ export default function AthletesManagementPage(): React.JSX.Element {
 								.toLowerCase()
 								.includes(qDeferred.toLowerCase())
 						: true;
-					return okSport && okQ;
+					return okGender && okQ;
 				});
 
-				setRows(clientFiltered.map(mapToRow));
-				setTotal(res.total ?? res.data.length);
-			} catch (e: any) {
+				const start = uiPage * pageSize;
+				const end = start + pageSize;
+				setTotal(clientFiltered.length);
+				setRows(clientFiltered.slice(start, end).map(mapToRow));
+			} catch {
 				setRows([]);
 				setTotal(0);
 			} finally {
 				if (reqIdRef.current === myReq) setLoading(false);
 			}
 		},
-		[qDeferred, sport, status]
+		[qDeferred, genderFilter, status, assignedAthleteIds, fetchAssignedIds]
 	);
 
 	React.useEffect(() => {
@@ -181,7 +209,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 
 	React.useEffect(() => {
 		setPage(0);
-	}, [qDeferred, sport, status]);
+	}, [qDeferred, genderFilter, status]);
 
 	const goDetail = (id: string) => router.push(`/dashboard/customers/${id}`);
 
@@ -201,12 +229,22 @@ export default function AthletesManagementPage(): React.JSX.Element {
 			setDeleting(true);
 			const idNum = Number(confirmUser.id);
 			if (Number.isNaN(idNum)) throw new Error("ID người dùng không hợp lệ");
+
+			const coachUserId = getLoggedInUserId?.() ?? null;
+			if (coachUserId) {
+				const matches = await listAthleteCoachAssignments({ coach_id: coachUserId, athlete_id: idNum });
+				for (const m of matches) {
+					await deleteAssignmentById(m.id);
+				}
+			}
+
 			const res = await deleteUser(idNum);
 			if (!res.ok) throw new Error(res.message || "Xóa người dùng thất bại");
 
-			setToast({ type: "success", message: "Đã xóa người dùng thành công" });
+			setToast({ type: "success", message: "Đã xóa người dùng và liên kết huấn luyện" });
 			setConfirmUser(null);
 
+			setAssignedAthleteIds(null);
 			reloadCurrent();
 		} catch (e: any) {
 			setToast({
@@ -236,15 +274,14 @@ export default function AthletesManagementPage(): React.JSX.Element {
 							select
 							fullWidth
 							size="small"
-							label="Bộ môn"
-							value={sport}
-							onChange={(e) => setSport(e.target.value as "all" | SportCode)}
+							label="Giới tính"
+							value={genderFilter}
+							onChange={(e) => setGenderFilter(e.target.value as typeof genderFilter)}
 						>
 							<MenuItem value="all">Tất cả</MenuItem>
-							<MenuItem value="shooting">Bắn súng</MenuItem>
-							<MenuItem value="archery">Bắn cung</MenuItem>
-							<MenuItem value="taekwondo">Taekwondo</MenuItem>
-							<MenuItem value="boxing">Boxing</MenuItem>
+							<MenuItem value="Nam">Nam</MenuItem>
+							<MenuItem value="Nữ">Nữ</MenuItem>
+							<MenuItem value="Khác">Khác</MenuItem>
 						</TextField>
 					</Box>
 

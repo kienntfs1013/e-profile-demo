@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import type { User } from "@/models/user";
+import { getIotDataByPhone, HrRow, setGoCareCredentials, SleepRow, Spo2Row, StepsRow } from "@/services/gocare.service";
+import { fetchUserByIdFromList, getLoggedInUserId, getUserById, type UserDTO } from "@/services/user.service";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -12,15 +13,8 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { Drop } from "@phosphor-icons/react/dist/ssr/Drop";
 import { Footprints } from "@phosphor-icons/react/dist/ssr/Footprints";
-import { Gauge } from "@phosphor-icons/react/dist/ssr/Gauge";
 import { Heartbeat } from "@phosphor-icons/react/dist/ssr/Heartbeat";
 import { Moon } from "@phosphor-icons/react/dist/ssr/Moon";
-import { Pulse } from "@phosphor-icons/react/dist/ssr/Pulse";
-import { Scales } from "@phosphor-icons/react/dist/ssr/Scales";
-import { Syringe } from "@phosphor-icons/react/dist/ssr/Syringe";
-import { TestTube } from "@phosphor-icons/react/dist/ssr/TestTube";
-import { Thermometer } from "@phosphor-icons/react/dist/ssr/Thermometer";
-import { Waveform } from "@phosphor-icons/react/dist/ssr/Waveform";
 import {
 	Bar,
 	BarChart,
@@ -52,95 +46,15 @@ type Metric = {
 	group: Group;
 };
 
-const METRICS: Metric[] = [
-	{
-		key: "spo2",
-		label: "Oxy trong máu",
-		value: "98",
-		unit: "%",
-		icon: Drop,
-		color: "#22c55e",
-		badge: "✓",
-		group: "vitals",
-	},
-	{
-		key: "bpm",
-		label: "Nhịp tim",
-		value: "72",
-		unit: "BPM",
-		icon: Heartbeat,
-		color: "#ef4444",
-		badge: "✓",
-		group: "vitals",
-	},
-	{ key: "bp", label: "Huyết áp", value: "118/76", unit: "mmHg", icon: Gauge, color: "#f97316", group: "vitals" },
-	{ key: "temp", label: "Nhiệt độ", value: "36.6", unit: "°C", icon: Thermometer, color: "#3b82f6", group: "vitals" },
-	{
-		key: "glucose",
-		label: "Đường huyết",
-		value: "92",
-		unit: "mg/dL",
-		icon: Syringe,
-		color: "#ef4444",
-		badge: "!",
-		group: "labs",
-	},
-	{
-		key: "weight",
-		label: "Cân nặng",
-		value: "154.3",
-		unit: "lb",
-		icon: Scales,
-		color: "#22c55e",
-		badge: "↓",
-		group: "vitals",
-	},
-	{ key: "sleep", label: "Giấc ngủ", value: "7h 45m", icon: Moon, color: "#8b5cf6", group: "activity" },
-	{
-		key: "steps",
-		label: "Bước đi",
-		value: "3,580",
-		helper: "35% mục tiêu",
-		icon: Footprints,
-		color: "#6366f1",
-		group: "activity",
-	},
-	{ key: "hrv", label: "HRV", value: "42", unit: "ms", icon: Pulse, color: "#06b6d4", group: "vitals" },
-	{ key: "ecg", label: "ECG", value: "Bình thường", icon: Waveform, color: "#f59e0b", group: "vitals" },
-	{ key: "uric", label: "Uric Acid", value: "5.6", unit: "mg/dL", icon: TestTube, color: "#fb7185", group: "labs" },
-];
+type DayPoint = { d: string; bpm?: number; steps?: number; spo2?: number; sleepH?: number; glucose?: number };
 
-type DayPoint = { d: string; bpm: number; steps: number; spo2: number; sleepH: number; glucose: number };
-
-const data7d: DayPoint[] = [
-	{ d: "T2", bpm: 70, steps: 3200, spo2: 98, sleepH: 7.5, glucose: 92 },
-	{ d: "T3", bpm: 74, steps: 4100, spo2: 98, sleepH: 7.2, glucose: 94 },
-	{ d: "T4", bpm: 71, steps: 2800, spo2: 97, sleepH: 7.8, glucose: 90 },
-	{ d: "T5", bpm: 72, steps: 4000, spo2: 98, sleepH: 6.9, glucose: 93 },
-	{ d: "T6", bpm: 73, steps: 5200, spo2: 99, sleepH: 7.0, glucose: 95 },
-	{ d: "T7", bpm: 69, steps: 6000, spo2: 98, sleepH: 8.1, glucose: 91 },
-	{ d: "CN", bpm: 68, steps: 4500, spo2: 98, sleepH: 8.0, glucose: 92 },
-];
-
-const data30d: DayPoint[] = Array.from({ length: 30 }).map((_, i) => ({
-	d: `${i + 1}`,
-	bpm: 68 + ((i * 7) % 10),
-	steps: 2500 + ((i * 523) % 5500),
-	spo2: 97 + (i % 3),
-	sleepH: 6.5 + ((i * 13) % 180) / 60,
-	glucose: 85 + ((i * 11) % 20),
-}));
+type Extra = {
+	phoneNumber?: string;
+	phone?: string;
+	mobile?: string;
+};
 
 const PIE_COLORS = ["#22c55e", "#ef4444", "#6366f1"];
-
-function buildSleepPie(points: DayPoint[]) {
-	const total = points.reduce((acc, p) => acc + p.sleepH, 0);
-	return [
-		{ name: "Ngủ sâu", value: +(total * 0.35).toFixed(1) },
-		{ name: "Ngủ nông", value: +(total * 0.45).toFixed(1) },
-		{ name: "REM", value: +(total * 0.2).toFixed(1) },
-	];
-}
 
 function toNumber(v: string): number {
 	return Number(String(v).replace(/[^0-9.-]/g, "")) || 0;
@@ -233,7 +147,6 @@ function evaluateMetric(m: Metric): { key: StatusKey; label: string; color: "suc
 function StatCard({ m }: { m: Metric }) {
 	const Icon = m.icon;
 	const status = evaluateMetric(m);
-
 	return (
 		<Paper
 			variant="outlined"
@@ -250,7 +163,6 @@ function StatCard({ m }: { m: Metric }) {
 				<Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
 					{m.label}
 				</Typography>
-
 				<Box
 					sx={{
 						width: 36,
@@ -266,7 +178,6 @@ function StatCard({ m }: { m: Metric }) {
 					<Icon weight="fill" />
 				</Box>
 			</Box>
-
 			<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
 				<Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
 					<Typography variant="h5" sx={{ fontWeight: 800 }}>
@@ -282,7 +193,6 @@ function StatCard({ m }: { m: Metric }) {
 					<Chip size="small" color={status.color} label={status.label} />
 				</Box>
 			</Box>
-
 			{m.helper ? (
 				<Typography variant="caption" color="text.secondary">
 					{m.helper}
@@ -317,75 +227,249 @@ function ChartCard({ title, children }: { title: string; children: React.ReactEl
 	);
 }
 
-export function HealthSection({ user }: { user: User }) {
+function startOfDayMs(d: Date) {
+	const x = new Date(d);
+	x.setHours(0, 0, 0, 0);
+	return x.getTime();
+}
+
+function fmtDay(ms: number) {
+	const d = new Date(ms);
+	const dd = String(d.getDate()).padStart(2, "0");
+	const mm = String(d.getMonth() + 1).padStart(2, "0");
+	return `${dd}/${mm}`;
+}
+
+function normalizePhone(p?: string | null) {
+	const digits = String(p || "").replace(/\D+/g, "");
+	if (digits.startsWith("0")) return digits.slice(1);
+	if (digits.startsWith("84") && digits.length === 11) return digits.slice(2);
+	return digits;
+}
+
+export function HealthSection({ id }: { id?: number | string }) {
 	const [date, setDate] = React.useState<string>(new Date().toISOString().slice(0, 10));
 	const [range, setRange] = React.useState<"7d" | "30d">("7d");
 	const [type, setType] = React.useState<Group>("all");
 	const [status, setStatus] = React.useState<StatusKey>("all");
+	const [series, setSeries] = React.useState<DayPoint[]>([]);
+	const [sleepPie, setSleepPie] = React.useState<{ name: string; value: number }[]>([]);
+	const [metrics, setMetrics] = React.useState<Metric[]>([]);
+	const [loading, setLoading] = React.useState(false);
+	const [user, setUser] = React.useState<(UserDTO & Extra) | null>(null);
 
-	const metrics = React.useMemo(() => {
-		let data = METRICS.filter((x) => (type === "all" ? true : x.group === type));
-		if (status !== "all") {
-			data = data.filter((m) => evaluateMetric(m).key === status);
+	React.useEffect(() => {
+		setGoCareCredentials({
+			baseURL: process.env.NEXT_PUBLIC_GOCARE_API || "https://portal.gocare.vn/api",
+			tenant: process.env.NEXT_PUBLIC_GOCARE_TENANT || "epr",
+			partnerId: process.env.NEXT_PUBLIC_GOCARE_PARTNER_ID,
+			partnerSecret: process.env.NEXT_PUBLIC_GOCARE_PARTNER_SECRET,
+		});
+	}, []);
+
+	React.useEffect(() => {
+		let off = false;
+		(async () => {
+			const viewerId = getLoggedInUserId?.();
+			const targetId = id != null && !Number.isNaN(Number(id)) ? Number(id) : viewerId || undefined;
+			if (!targetId) {
+				if (!off) setUser(null);
+				return;
+			}
+			try {
+				const u =
+					(await getUserById(targetId).catch(() => null)) ?? (await fetchUserByIdFromList(targetId).catch(() => null));
+				if (!off) setUser((u as any) ?? null);
+			} catch {
+				if (!off) setUser(null);
+			}
+		})();
+		return () => {
+			off = true;
+		};
+	}, [id]);
+
+	const fetchData = React.useCallback(async () => {
+		const phone =
+			normalizePhone(user?.phoneNumber) ||
+			normalizePhone((user as any)?.phone) ||
+			normalizePhone((user as any)?.mobile) ||
+			"";
+		if (!phone) {
+			setSeries([]);
+			setSleepPie([]);
+			setMetrics([]);
+			return;
 		}
-		return data;
-	}, [type, status]);
+		setLoading(true);
+		try {
+			const end = new Date(date + "T23:59:59").getTime();
+			const days = range === "7d" ? 7 : 30;
+			const start = startOfDayMs(new Date(end - (days - 1) * 24 * 60 * 60 * 1000));
+			const [hrs, spo2s, steps, sleeps] = await Promise.all([
+				getIotDataByPhone<"hr">("hr", phone, start, end),
+				getIotDataByPhone<"spo2">("spo2", phone, start, end),
+				getIotDataByPhone<"steps">("steps", phone, start, end),
+				getIotDataByPhone<"sleep">("sleep", phone, start, end),
+			]);
+			const map = new Map<number, { hr: number[]; sp: number[]; st: number; slHours: number[] }>();
+			hrs.forEach((r: HrRow) => {
+				const t = Number(r.timestamp || 0);
+				const k = startOfDayMs(new Date(t));
+				const m = map.get(k) || { hr: [], sp: [], st: 0, slHours: [] };
+				if (typeof r.heartValue === "number") m.hr.push(r.heartValue);
+				map.set(k, m);
+			});
+			spo2s.forEach((r: Spo2Row) => {
+				const t = Number(r.timestamp || 0);
+				const k = startOfDayMs(new Date(t));
+				const m = map.get(k) || { hr: [], sp: [], st: 0, slHours: [] };
+				if (typeof r.oxygenValue === "number") m.sp.push(r.oxygenValue);
+				map.set(k, m);
+			});
+			steps.forEach((r: StepsRow) => {
+				const t = Number(r.timestamp || 0);
+				const k = startOfDayMs(new Date(t));
+				const m = map.get(k) || { hr: [], sp: [], st: 0, slHours: [] };
+				if (typeof r.stepValue === "number") m.st += r.stepValue;
+				map.set(k, m);
+			});
+			sleeps.forEach((r: SleepRow) => {
+				const sl = Number(r.sleepTime || 0);
+				const wk = Number(r.wakeupTime || 0);
+				if (sl && wk && wk > sl) {
+					const k = startOfDayMs(new Date(sl));
+					const m = map.get(k) || { hr: [], sp: [], st: 0, slHours: [] };
+					const hours = (wk - sl) / 3600000;
+					m.slHours.push(hours);
+					map.set(k, m);
+				}
+			});
+			const rows: DayPoint[] = [];
+			for (let i = 0; i < days; i++) {
+				const k = start + i * 24 * 60 * 60 * 1000;
+				const v = map.get(k) || { hr: [], sp: [], st: 0, slHours: [] };
+				const avg = (arr: number[]) =>
+					arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : undefined;
+				const sl = v.slHours.length ? +v.slHours.reduce((a, b) => a + b, 0).toFixed(1) : undefined;
+				rows.push({
+					d: fmtDay(k),
+					bpm: avg(v.hr),
+					steps: v.st ? Math.round(v.st) : undefined,
+					spo2: avg(v.sp),
+					sleepH: sl,
+				});
+			}
+			const last = rows[rows.length - 1] || {};
+			const m: Metric[] = [
+				{
+					key: "spo2",
+					label: "Oxy trong máu",
+					value: last.spo2 != null ? String(last.spo2) : "—",
+					unit: "%",
+					icon: Drop,
+					color: "#22c55e",
+					group: "vitals",
+				},
+				{
+					key: "bpm",
+					label: "Nhịp tim",
+					value: last.bpm != null ? String(last.bpm) : "—",
+					unit: "BPM",
+					icon: Heartbeat,
+					color: "#ef4444",
+					group: "vitals",
+				},
+				{
+					key: "sleep",
+					label: "Giấc ngủ",
+					value: last.sleepH != null ? String(last.sleepH) : "—",
+					unit: "h",
+					icon: Moon,
+					color: "#8b5cf6",
+					group: "activity",
+				},
+				{
+					key: "steps",
+					label: "Bước đi",
+					value: last.steps != null ? String(last.steps) : "—",
+					helper: "",
+					icon: Footprints,
+					color: "#6366f1",
+					group: "activity",
+				},
+			];
+			const totalSleep = rows.reduce((acc, r) => acc + (r.sleepH || 0), 0);
+			const pie = [
+				{ name: "Ngủ sâu", value: +(totalSleep * 0.35).toFixed(1) },
+				{ name: "Ngủ nông", value: +(totalSleep * 0.45).toFixed(1) },
+				{ name: "REM", value: +(totalSleep * 0.2).toFixed(1) },
+			];
+			setSeries(rows);
+			setSleepPie(pie);
+			setMetrics(m);
+		} finally {
+			setLoading(false);
+		}
+	}, [user, date, range]);
 
-	const series = range === "7d" ? data7d : data30d;
-	const sleepPie = React.useMemo(() => buildSleepPie(series), [series]);
+	React.useEffect(() => {
+		fetchData();
+	}, [fetchData]);
+
+	const visible = React.useMemo(
+		() => metrics.filter((x) => (type === "all" ? true : x.group === type)),
+		[metrics, type]
+	);
+	const visibleWithEval = React.useMemo(() => visible.map((m) => ({ metric: m, eval: evaluateMetric(m) })), [visible]);
+	const filtered = React.useMemo(
+		() => visibleWithEval.filter((x) => (status === "all" ? true : x.eval.key === status)),
+		[visibleWithEval, status]
+	);
 
 	return (
 		<Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-			<Box
-				sx={{
-					display: "grid",
-					gap: 2,
-					gridTemplateColumns: {
-						xs: "1fr",
-						md: "repeat(auto-fit, minmax(180px, 1fr))",
-					},
-					alignItems: "center",
-				}}
-			>
+			<Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, width: "100%" }}>
 				<TextField
 					select
 					size="small"
 					label="Loại chỉ số"
 					value={type}
 					onChange={(e) => setType(e.target.value as Group)}
+					sx={{ flex: "1 1 200px" }}
 				>
 					<MenuItem value="all">Tất cả</MenuItem>
 					<MenuItem value="vitals">Sinh tồn</MenuItem>
 					<MenuItem value="activity">Hoạt động</MenuItem>
 					<MenuItem value="labs">Xét nghiệm</MenuItem>
 				</TextField>
-
 				<TextField
 					type="date"
 					size="small"
-					label="Ngày"
+					label="Ngày kết thúc"
 					value={date}
 					onChange={(e) => setDate(e.target.value)}
 					InputLabelProps={{ shrink: true }}
+					sx={{ flex: "1 1 200px" }}
 				/>
-
 				<TextField
 					select
 					size="small"
 					label="Khoảng thời gian"
 					value={range}
 					onChange={(e) => setRange(e.target.value as "7d" | "30d")}
+					sx={{ flex: "1 1 200px" }}
 				>
 					<MenuItem value="7d">7 ngày</MenuItem>
 					<MenuItem value="30d">1 tháng</MenuItem>
 				</TextField>
-
 				<TextField
 					select
 					size="small"
 					label="Tình trạng"
 					value={status}
 					onChange={(e) => setStatus(e.target.value as StatusKey)}
+					sx={{ flex: "1 1 200px" }}
 				>
 					<MenuItem value="all">Tất cả</MenuItem>
 					<MenuItem value="good">Tốt</MenuItem>
@@ -393,22 +477,13 @@ export function HealthSection({ user }: { user: User }) {
 					<MenuItem value="danger">Nguy hiểm</MenuItem>
 				</TextField>
 			</Box>
-
-			<Box
-				sx={{
-					display: "grid",
-					gap: 2,
-					alignItems: "stretch",
-					gridTemplateColumns: { xs: "1fr", md: "repeat(4, minmax(0, 1fr))" },
-				}}
-			>
-				{metrics.map((m) => (
-					<Box key={m.key} sx={{ minWidth: 0 }}>
-						<StatCard m={m} />
+			<Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "space-between" }}>
+				{filtered.map(({ metric }) => (
+					<Box key={metric.key} sx={{ flex: "1 1 calc(20% - 16px)", minWidth: 160 }}>
+						<StatCard m={metric} />
 					</Box>
 				))}
 			</Box>
-
 			<Box
 				sx={{
 					display: "grid",
@@ -430,7 +505,6 @@ export function HealthSection({ user }: { user: User }) {
 						}
 					</ChartCard>
 				</Box>
-
 				<Box sx={{ minWidth: 0 }}>
 					<ChartCard title="Nhịp tim (BPM) theo ngày">
 						{
@@ -445,7 +519,6 @@ export function HealthSection({ user }: { user: User }) {
 						}
 					</ChartCard>
 				</Box>
-
 				<Box sx={{ minWidth: 0 }}>
 					<ChartCard title={`Cấu trúc giấc ngủ (${range === "7d" ? "7 ngày" : "30 ngày"})`}>
 						{
@@ -461,7 +534,6 @@ export function HealthSection({ user }: { user: User }) {
 						}
 					</ChartCard>
 				</Box>
-
 				<Box sx={{ minWidth: 0 }}>
 					<ChartCard title="SpO₂ & Đường huyết theo ngày">
 						{
