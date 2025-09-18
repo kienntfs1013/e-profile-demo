@@ -5,8 +5,9 @@ deploy:
   stage: deploy
   variables:
     GIT_STRATEGY: none
-  only:
-    - main
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_BRANCH == "dev"'
   before_script:
     - apt-get update -qq
     - apt-get install -qq git openssh-client
@@ -14,25 +15,40 @@ deploy:
     - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
     - mkdir -p ~/.ssh
     - echo -e "Host *\n\tStrictHostKeyChecking no\n" > ~/.ssh/config
-  script:
-    - |
-      ssh -o StrictHostKeyChecking=no -T $SSH_USER@$SSH_SERVER_IP <<EOSSH
-      set -e
-      echo "Deploying $SERVICE_NAME..."
-      rm -rf $SERVICE_NAME || true
-      git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
-      cd $SERVICE_NAME
-      git checkout main
-      git pull origin main
+  script: |
+    # Xác định tên service dựa theo branch
+    if [ "$CI_COMMIT_BRANCH" = "main" ]; then
+      DEPLOY_NAME="$SERVICE_NAME"
+      IMAGE_TAG="prod"
+      GIT_BRANCH="main"
+      PORT=3000
+    elif [ "$CI_COMMIT_BRANCH" = "dev" ]; then
+      DEPLOY_NAME="${SERVICE_NAME}_dev"
+      IMAGE_TAG="dev"
+      GIT_BRANCH="dev"
+      PORT=3001
+    else
+      echo "❌ Nhánh $CI_COMMIT_BRANCH không được cấu hình để deploy."
+      exit 1
+    fi
 
-      echo "🚀 Build Docker image..."
-      docker stop $SERVICE_NAME || true
-      docker rm $SERVICE_NAME || true
-      docker build --build-arg NODE_VERSION=20.19.1 -t $SERVICE_NAME:1.0 .
+    ssh -o StrictHostKeyChecking=no -T $SSH_USER@$SSH_SERVER_IP <<EOSSH
+    set -e
+    echo "Deploying $DEPLOY_NAME..."
+    rm -rf $DEPLOY_NAME || true
+    git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/dreamaxcompany/e-profile.git $DEPLOY_NAME
+    cd $DEPLOY_NAME
+    git checkout $GIT_BRANCH
+    git pull origin $GIT_BRANCH
 
-      echo "📦 Run container..."
-      docker run -d --name $SERVICE_NAME -p 3000:3000 $SERVICE_NAME:1.0
+    echo "🚀 Build Docker image..."
+    docker stop $DEPLOY_NAME || true
+    docker rm $DEPLOY_NAME || true
+    docker build --build-arg NODE_VERSION=20.19.1 -t $DEPLOY_NAME:$IMAGE_TAG .
 
-      docker ps -a
-      echo "✅ Deploy thành công"
-      EOSSH
+    echo "📦 Run container..."
+    docker run -d --name $DEPLOY_NAME -p $PORT:3000 $DEPLOY_NAME:$IMAGE_TAG
+
+    docker ps -a
+    echo "✅ Deploy thành công"
+    EOSSH

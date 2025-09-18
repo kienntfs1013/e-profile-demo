@@ -15,8 +15,8 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Chạy build, nếu fail thì vẫn cho qua
-RUN npm run build || true
+# Chạy build (nếu fail thì container không chạy được, nên KHÔNG dùng || true)
+RUN npm run build
 
 # ----- Production stage -----
 FROM node:${NODE_VERSION}-alpine AS runner
@@ -24,12 +24,13 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy source và build (nếu có)
+# Copy output cần thiết cho runtime
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/ ./
 
 EXPOSE 3000
-CMD ["npm", "run", "dev"]
+
+# Chạy Next.js ở production mode
+CMD ["npm", "start"]
