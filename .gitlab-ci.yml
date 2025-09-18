@@ -12,54 +12,52 @@ stages:
     - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
     - mkdir -p ~/.ssh
     - echo -e "Host *\n\tStrictHostKeyChecking no\n" > ~/.ssh/config
-  script: |
-    ssh -o StrictHostKeyChecking=no -T $SSH_USER@$SSH_SERVER_IP <<EOSSH
-    set -e
-    echo "🚀 Deploying $SERVICE_NAME ..."
+  script:
+    - |
+      ssh -o StrictHostKeyChecking=no -T $SSH_USER@$SSH_SERVER_IP <<EOSSH
+      set -e
+      echo "🚀 Deploying $SERVICE_NAME ..."
 
-    # Xác định service name & port theo branch (giá trị CI_COMMIT_REF_NAME được expand LOCAL)
-    if [ "$CI_COMMIT_REF_NAME" = "dev" ]; then
-      SERVICE_NAME="${SERVICE_NAME}_dev"
-      APP_PORT=3001
-      BRANCH="dev"
-    else
-      SERVICE_NAME="$SERVICE_NAME"
-      APP_PORT=3000
-      BRANCH="main"
-    fi
+      # Clone repo
+      rm -rf $SERVICE_NAME || true
+      git clone https://oauth2:${GITLAB_TOKEN}@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
+      cd $SERVICE_NAME
+      git checkout $CI_COMMIT_REF_NAME
 
-    rm -rf $SERVICE_NAME || true
-    git clone https://oauth2:${GITLAB_TOKEN}@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
-    cd $SERVICE_NAME
-    git checkout $BRANCH
+      # Build image
+      IMAGE_NAME=$SERVICE_NAME:$(date +%Y%m%d%H%M%S)
+      echo "📦 Build Docker image..."
+      docker build --build-arg NODE_VERSION=20.19.1 -t $IMAGE_NAME .
 
-    IMAGE_NAME=$SERVICE_NAME:$(date +%Y%m%d%H%M%S)
+      # Stop & remove old container
+      echo "🛑 Stop old container..."
+      docker stop $SERVICE_NAME || true
+      docker rm $SERVICE_NAME || true
 
-    echo "📦 Build Docker image..."
-    docker build --build-arg NODE_VERSION=20.19.1 -t $IMAGE_NAME .
+      # Run new container
+      echo "▶️ Run new container..."
+      docker run -d \
+        --name $SERVICE_NAME \
+        --restart=always \
+        -p $APP_PORT:3000 \
+        $IMAGE_NAME
 
-    echo "🛑 Stop old container..."
-    docker stop $SERVICE_NAME || true
-    docker rm $SERVICE_NAME || true
-
-    echo "▶️ Run new container..."
-    docker run -d \
-      --name $SERVICE_NAME \
-      --restart=always \
-      -p $APP_PORT:3000 \
-      $IMAGE_NAME
-
-    docker image prune -f
-    docker ps -a
-    echo "✅ Deploy thành công ($SERVICE_NAME trên port $APP_PORT)"
-EOSSH
+      docker image prune -f
+      docker ps -a
+      echo "✅ Deploy thành công ($SERVICE_NAME trên port $APP_PORT)"
 
 deploy-main:
   <<: *deploy_template
+  variables:
+    SERVICE_NAME: $SERVICE_NAME
+    APP_PORT: 3000
   only:
     - main
 
 deploy-dev:
   <<: *deploy_template
+  variables:
+    SERVICE_NAME: ${SERVICE_NAME}_dev
+    APP_PORT: 3001
   only:
     - dev
