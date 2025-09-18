@@ -13,11 +13,11 @@ stages:
     - mkdir -p ~/.ssh
     - echo -e "Host *\n\tStrictHostKeyChecking no\n" > ~/.ssh/config
   script: |
-    ssh -o StrictHostKeyChecking=no -T $SSH_USER@$SSH_SERVER_IP <<'EOSSH'
+    ssh -o StrictHostKeyChecking=no -T $SSH_USER@$SSH_SERVER_IP <<EOSSH
     set -e
     echo "🚀 Deploying $SERVICE_NAME ..."
 
-    # Xác định service name và port theo branch
+    # Xác định service name & port theo branch (giá trị CI_COMMIT_REF_NAME được expand LOCAL)
     if [ "$CI_COMMIT_REF_NAME" = "dev" ]; then
       SERVICE_NAME="${SERVICE_NAME}_dev"
       APP_PORT=3001
@@ -29,8 +29,7 @@ stages:
     fi
 
     rm -rf $SERVICE_NAME || true
-    echo $SERVICE_NAME
-    git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
+    git clone https://oauth2:${GITLAB_TOKEN}@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
     cd $SERVICE_NAME
     git checkout $BRANCH
 
@@ -53,7 +52,7 @@ stages:
     docker image prune -f
     docker ps -a
     echo "✅ Deploy thành công ($SERVICE_NAME trên port $APP_PORT)"
-    EOSSH
+EOSSH
 
 deploy-main:
   <<: *deploy_template
