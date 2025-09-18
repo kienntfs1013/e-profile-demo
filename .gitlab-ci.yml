@@ -1,10 +1,12 @@
 stages:
   - deploy
 
-.deploy_template: &deploy_template
+deploy:
   stage: deploy
   variables:
     GIT_STRATEGY: none
+  only:
+    - main
   before_script:
     - apt-get update -qq
     - apt-get install -qq git openssh-client
@@ -16,48 +18,21 @@ stages:
     - |
       ssh -o StrictHostKeyChecking=no -T $SSH_USER@$SSH_SERVER_IP <<EOSSH
       set -e
-      echo "🚀 Deploying $SERVICE_NAME ..."
-
-      # Clone repo
+      echo "Deploying $SERVICE_NAME..."
       rm -rf $SERVICE_NAME || true
-      git clone https://oauth2:${GITLAB_TOKEN}@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
+      git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
       cd $SERVICE_NAME
-      git checkout $CI_COMMIT_REF_NAME
+      git checkout main
+      git pull origin main
 
-      # Build image
-      IMAGE_NAME=$SERVICE_NAME:$(date +%Y%m%d%H%M%S)
-      echo "📦 Build Docker image..."
-      docker build --build-arg NODE_VERSION=20.19.1 -t $IMAGE_NAME .
-
-      # Stop & remove old container
-      echo "🛑 Stop old container..."
+      echo "🚀 Build Docker image..."
       docker stop $SERVICE_NAME || true
       docker rm $SERVICE_NAME || true
+      docker build --build-arg NODE_VERSION=20.19.1 -t $SERVICE_NAME:1.0 .
 
-      # Run new container
-      echo "▶️ Run new container..."
-      docker run -d \
-        --name $SERVICE_NAME \
-        --restart=always \
-        -p $APP_PORT:3000 \
-        $IMAGE_NAME
+      echo "📦 Run container..."
+      docker run -d --name $SERVICE_NAME -p 3000:3000 $SERVICE_NAME:1.0
 
-      docker image prune -f
       docker ps -a
-      echo "✅ Deploy thành công ($SERVICE_NAME trên port $APP_PORT)"
-
-deploy-main:
-  <<: *deploy_template
-  variables:
-    SERVICE_NAME: $SERVICE_NAME
-    APP_PORT: 3000
-  only:
-    - main
-
-deploy-dev:
-  <<: *deploy_template
-  variables:
-    SERVICE_NAME: ${SERVICE_NAME}_dev
-    APP_PORT: 3001
-  only:
-    - dev
+      echo "✅ Deploy thành công"
+      EOSSH
