@@ -195,7 +195,7 @@ export default function CompetitionsPage(): React.JSX.Element {
 						/>
 					</Box>
 
-					<Box sx={{ width: { xs: "100%", sm: 260 } }}>
+					<Box sx={{ width: { xs: "100%", sm: 220 } }}>
 						<TextField
 							select
 							fullWidth
@@ -227,7 +227,6 @@ export default function CompetitionsPage(): React.JSX.Element {
 				</Box>
 			</Stack>
 
-			{/* Table */}
 			<Paper variant="outlined" sx={{ overflow: "hidden", borderRadius: 2 }}>
 				<TableContainer>
 					<Table sx={{ minWidth: 900 }}>
