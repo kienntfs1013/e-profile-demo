@@ -29,6 +29,7 @@ stages:
     fi
 
     rm -rf $SERVICE_NAME || true
+    echo $SERVICE_NAME
     git clone https://oauth2:${GITLAB_TOKEN}@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
     cd $SERVICE_NAME
     git checkout $BRANCH
