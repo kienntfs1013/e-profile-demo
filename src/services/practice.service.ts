@@ -11,9 +11,14 @@ export type TaekwondoPracticeDTO = {
 	drills_practiced?: string;
 	sparring_duration?: number | string;
 	fitness_exercises?: string;
-	comments?: string;
+	notes?: string;
+	offense_score?: number | string;
+	defense_score?: number | string;
+	punch_power?: number | string;
 	created_at?: string;
+	updated_at?: string;
 };
+
 export type ShootingPracticeDTO = {
 	id: number;
 	athlete_id: number;
@@ -24,9 +29,12 @@ export type ShootingPracticeDTO = {
 	shots_fired?: number | string;
 	shots_hit?: number | string;
 	accuracy?: number | string;
-	comments?: string;
+	notes?: string;
+
 	created_at?: string;
+	updated_at?: string;
 };
+
 export type BoxingPracticeDTO = {
 	id: number;
 	athlete_id: number;
@@ -36,9 +44,12 @@ export type BoxingPracticeDTO = {
 	defense_success_rate?: number | string;
 	footwork_score?: number | string;
 	sparring_partner?: string;
-	comments?: string;
+	notes?: string;
+
 	created_at?: string;
+	updated_at?: string;
 };
+
 export type ArcheryPracticeDTO = {
 	id: number;
 	athlete_id: number;
@@ -46,10 +57,12 @@ export type ArcheryPracticeDTO = {
 	target_distance?: number | string;
 	end_number?: number | string;
 	arrow_number?: number | string;
-	score?: number | string;
+	score?: number | string | null;
 	x_coord?: string | number;
 	y_coord?: string | number;
+
 	created_at?: string;
+	updated_at?: string;
 };
 
 export type PagedListResponse<T> = {

@@ -73,6 +73,9 @@ const defs: Record<SportKey, FieldDef[]> = {
 		{ key: "drills_practiced", label: "Drills", type: "text" },
 		{ key: "sparring_duration", label: "Đấu đối kháng (phút)", type: "number" },
 		{ key: "fitness_exercises", label: "Bài thể lực", type: "text" },
+		{ key: "offense_score", label: "Tấn công", type: "number" },
+		{ key: "defense_score", label: "Phòng thủ", type: "number" },
+		{ key: "punch_power", label: "Sức mạnh đòn", type: "number" },
 		{ key: "notes", label: "Ghi chú", type: "text" },
 	],
 };

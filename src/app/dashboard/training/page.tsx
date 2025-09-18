@@ -13,6 +13,7 @@ import {
 	type TaekwondoPerformanceAssessmentDTO,
 } from "@/services/evaluation.service";
 import {
+	deleteArcheryPracticeById,
 	listArcheryPracticesPageByAthlete,
 	listBoxingPracticesPageByAthlete,
 	listShootingPracticesPageByAthlete,
@@ -27,7 +28,13 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardHeader from "@mui/material/CardHeader";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogTitle from "@mui/material/DialogTitle";
 import Divider from "@mui/material/Divider";
+import IconButton from "@mui/material/IconButton";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import type { SxProps } from "@mui/material/styles";
@@ -38,6 +45,9 @@ import TableHead from "@mui/material/TableHead";
 import TablePagination from "@mui/material/TablePagination";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
+import { PencilSimple } from "@phosphor-icons/react/dist/ssr/PencilSimple";
+import { Plus } from "@phosphor-icons/react/dist/ssr/Plus";
+import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 import dayjs from "dayjs";
 
 import "dayjs/locale/vi";
@@ -102,6 +112,8 @@ export default function Page(): React.JSX.Element {
 	const [evalTotal, setEvalTotal] = React.useState(0);
 	const [evalPage, setEvalPage] = React.useState(0);
 	const [evalRowsPerPage, setEvalRowsPerPage] = React.useState(5);
+
+	const [confirmArchery, setConfirmArchery] = React.useState<number | null>(null);
 
 	React.useEffect(() => {
 		let cancelled = false;
@@ -272,6 +284,24 @@ export default function Page(): React.JSX.Element {
 		return () => controller.abort();
 	}, [athleteId, sportKey, evalPage, evalRowsPerPage, debEvalSearch, debEvalDate, evalSort]);
 
+	const handleAddArchery = () => {
+		if (!athleteId) return;
+		router.push(`/dashboard/customers/training/archery/add?athlete=${athleteId}`);
+	};
+
+	const handleEditArchery = (id: number | string) => {
+		if (!athleteId) return;
+		router.push(`/dashboard/customers/training/archery/update/${id}?athlete=${athleteId}`);
+	};
+
+	const doDeleteArchery = async () => {
+		if (!confirmArchery) return;
+		await deleteArcheryPracticeById(Number(confirmArchery));
+		setRows((prev) => prev.filter((r) => Number(r.id) !== Number(confirmArchery)));
+		setTotal((t) => Math.max(0, t - 1));
+		setConfirmArchery(null);
+	};
+
 	return (
 		<Stack spacing={3}>
 			{sportKey ? (
@@ -421,7 +451,7 @@ export default function Page(): React.JSX.Element {
 
 			{sportKey === "taekwondo" && (
 				<PracticeTableCard title="Taekwondo — Buổi tập">
-					<Table sx={{ minWidth: 980 }}>
+					<Table sx={{ minWidth: 1080 }}>
 						<TableHead>
 							<TableRow>
 								<TableCell>Ngày tập</TableCell>
@@ -429,6 +459,9 @@ export default function Page(): React.JSX.Element {
 								<TableCell>Drills</TableCell>
 								<TableCell>Đối kháng (phút)</TableCell>
 								<TableCell>Bài thể lực</TableCell>
+								<TableCell>Tấn công</TableCell>
+								<TableCell>Phòng thủ</TableCell>
+								<TableCell>Sức mạnh đòn</TableCell>
 								<TableCell>Ghi chú</TableCell>
 							</TableRow>
 						</TableHead>
@@ -440,12 +473,15 @@ export default function Page(): React.JSX.Element {
 									<TableCell>{r.drills_practiced || "-"}</TableCell>
 									<TableCell>{r.sparring_duration ?? "-"}</TableCell>
 									<TableCell>{r.fitness_exercises || "-"}</TableCell>
-									<TableCell>{r.comments || "-"}</TableCell>
+									<TableCell>{r.offense_score ?? "-"}</TableCell>
+									<TableCell>{r.defense_score ?? "-"}</TableCell>
+									<TableCell>{r.punch_power ?? "-"}</TableCell>
+									<TableCell>{r.notes || "-"}</TableCell>
 								</TableRow>
 							))}
 							{!loading && rows.length === 0 && (
 								<TableRow>
-									<TableCell colSpan={7}>
+									<TableCell colSpan={9}>
 										<Box p={2} textAlign="center" color="text.secondary">
 											Không có dữ liệu
 										</Box>
@@ -495,7 +531,7 @@ export default function Page(): React.JSX.Element {
 									<TableCell>{r.shots_fired ?? "-"}</TableCell>
 									<TableCell>{r.shots_hit ?? "-"}</TableCell>
 									<TableCell>{r.accuracy ?? "-"}</TableCell>
-									<TableCell>{r.comments || "-"}</TableCell>
+									<TableCell>{r.notes || "-"}</TableCell>
 								</TableRow>
 							))}
 							{!loading && rows.length === 0 && (
@@ -549,7 +585,7 @@ export default function Page(): React.JSX.Element {
 									<TableCell>{r.defense_success_rate ?? "-"}</TableCell>
 									<TableCell>{r.footwork_score ?? "-"}</TableCell>
 									<TableCell>{r.sparring_partner || "-"}</TableCell>
-									<TableCell>{r.comments || "-"}</TableCell>
+									<TableCell>{r.notes || "-"}</TableCell>
 									<TableCell>{r.created_at ? dayjs(r.created_at).format("DD/MM/YYYY") : "-"}</TableCell>
 								</TableRow>
 							))}
@@ -581,7 +617,14 @@ export default function Page(): React.JSX.Element {
 			)}
 
 			{sportKey === "archery" && (
-				<PracticeTableCard title="Bắn cung — Buổi tập">
+				<PracticeTableCard
+					title="Bắn cung — Buổi tập"
+					header={
+						<Button onClick={handleAddArchery} startIcon={<Plus />} size="small" variant="contained">
+							Thêm mới
+						</Button>
+					}
+				>
 					<Table sx={{ minWidth: 1180 }}>
 						<TableHead>
 							<TableRow>
@@ -592,6 +635,7 @@ export default function Page(): React.JSX.Element {
 								<TableCell>Điểm</TableCell>
 								<TableCell>Lệch X</TableCell>
 								<TableCell>Lệch Y</TableCell>
+								<TableCell align="right">Thao tác</TableCell>
 							</TableRow>
 						</TableHead>
 						<TableBody>
@@ -604,11 +648,19 @@ export default function Page(): React.JSX.Element {
 									<TableCell>{r.score ?? "-"}</TableCell>
 									<TableCell>{r.x_coord ?? "-"}</TableCell>
 									<TableCell>{r.y_coord ?? "-"}</TableCell>
+									<TableCell align="right">
+										<IconButton size="small" onClick={() => handleEditArchery(r.id)}>
+											<PencilSimple />
+										</IconButton>
+										<IconButton size="small" color="error" onClick={() => setConfirmArchery(Number(r.id))}>
+											<Trash />
+										</IconButton>
+									</TableCell>
 								</TableRow>
 							))}
 							{!loading && rows.length === 0 && (
 								<TableRow>
-									<TableCell colSpan={8}>
+									<TableCell colSpan={9}>
 										<Box p={2} textAlign="center" color="text.secondary">
 											Không có dữ liệu
 										</Box>
@@ -638,6 +690,21 @@ export default function Page(): React.JSX.Element {
 					Không xác định bộ môn của vận động viên.
 				</Box>
 			)}
+
+			<Dialog open={confirmArchery != null} onClose={() => setConfirmArchery(null)} fullWidth maxWidth="xs">
+				<DialogTitle>Xác nhận xóa buổi tập</DialogTitle>
+				<DialogContent>
+					<DialogContentText>Bạn có chắc muốn xóa bản ghi {confirmArchery ?? ""}?</DialogContentText>
+				</DialogContent>
+				<DialogActions>
+					<Button variant="outlined" onClick={() => setConfirmArchery(null)}>
+						Hủy
+					</Button>
+					<Button color="error" variant="contained" onClick={doDeleteArchery}>
+						Đồng ý
+					</Button>
+				</DialogActions>
+			</Dialog>
 		</Stack>
 	);
 }

@@ -1,4 +1,3 @@
-// src/app/dashboard/customers/training/[sport]/add/page.tsx
 "use client";
 
 import { useParams, useSearchParams } from "next/navigation";

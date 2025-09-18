@@ -231,7 +231,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 		setEvalPage(0);
 	}, [sportKey, evalSearch, evalSort, evalDate]);
 
-	const applyCommonSort = <T extends { created_at?: string; session_date?: string }>(arr: T[]) => {
+	const applyCommonSort = <T extends { created_at?: string; session_date?: string; notes?: string }>(arr: T[]) => {
 		const byTime = [...arr].sort((a, b) => {
 			const da = (a as any).session_date || a.created_at || "";
 			const db = (b as any).session_date || b.created_at || "";
@@ -413,7 +413,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 									<TableRow key={r.id} hover>
 										<TableCell>{r.date ? dayjs(r.date).format("DD/MM/YYYY") : "-"}</TableCell>
 										<TableCell>{r.score ?? "-"}</TableCell>
-										<TableCell sx={{ maxWidth: 520 }}>{r.comments || "-"}</TableCell>
+										<TableCell sx={{ maxWidth: 520 }}>{r.comment ?? r.comments ?? "-"}</TableCell>
 										<TableCell>{r.created_at ? dayjs(r.created_at).format("DD/MM/YYYY") : "-"}</TableCell>
 										<TableCell align="right">
 											<IconButton size="small" onClick={() => handleEditEvaluation(r.id)}>
@@ -515,7 +515,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 						</Button>
 					}
 				>
-					<Table sx={{ minWidth: 980 }}>
+					<Table sx={{ minWidth: 1080 }}>
 						<TableHead>
 							<TableRow>
 								<TableCell>Ngày tập</TableCell>
@@ -523,6 +523,9 @@ export function TrainingSection({ id }: { id?: number | string }) {
 								<TableCell>Drills</TableCell>
 								<TableCell>Đấu đối kháng (phút)</TableCell>
 								<TableCell>Bài thể lực</TableCell>
+								<TableCell>Tấn công</TableCell>
+								<TableCell>Phòng thủ</TableCell>
+								<TableCell>Sức mạnh đòn</TableCell>
 								<TableCell>Ghi chú</TableCell>
 								<TableCell align="right">Thao tác</TableCell>
 							</TableRow>
@@ -535,7 +538,10 @@ export function TrainingSection({ id }: { id?: number | string }) {
 									<TableCell>{r.drills_practiced || "-"}</TableCell>
 									<TableCell>{r.sparring_duration ?? "-"}</TableCell>
 									<TableCell>{r.fitness_exercises || "-"}</TableCell>
-									<TableCell>{r.comments || "-"}</TableCell>
+									<TableCell>{r.offense_score ?? "-"}</TableCell>
+									<TableCell>{r.defense_score ?? "-"}</TableCell>
+									<TableCell>{r.punch_power ?? "-"}</TableCell>
+									<TableCell>{r.notes || "-"}</TableCell>
 									<TableCell align="right">
 										<IconButton size="small" onClick={() => handleEdit(r.id)}>
 											<PencilSimple />
@@ -552,7 +558,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 							))}
 							{!loading && tkdFiltered.length === 0 && (
 								<TableRow>
-									<TableCell colSpan={8}>
+									<TableCell colSpan={10}>
 										<Box p={2} textAlign="center" color="text.secondary">
 											Không có dữ liệu
 										</Box>
@@ -610,7 +616,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 									<TableCell>{r.shots_fired ?? "-"}</TableCell>
 									<TableCell>{r.shots_hit ?? "-"}</TableCell>
 									<TableCell>{r.accuracy ?? "-"}</TableCell>
-									<TableCell>{r.comments || "-"}</TableCell>
+									<TableCell>{r.notes || "-"}</TableCell>
 									<TableCell align="right">
 										<IconButton size="small" onClick={() => handleEdit(r.id)}>
 											<PencilSimple />
@@ -680,7 +686,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 									<TableCell>{r.defense_success_rate ?? "-"}</TableCell>
 									<TableCell>{r.footwork_score ?? "-"}</TableCell>
 									<TableCell>{r.sparring_partner || "-"}</TableCell>
-									<TableCell>{r.comments || "-"}</TableCell>
+									<TableCell>{r.notes || "-"}</TableCell>
 									<TableCell>{r.created_at ? dayjs(r.created_at).format("DD/MM/YYYY") : "-"}</TableCell>
 									<TableCell align="right">
 										<IconButton size="small" onClick={() => handleEdit(r.id)}>
