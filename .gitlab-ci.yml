@@ -1,12 +1,10 @@
 stages:
   - deploy
 
-deploy:
+.deploy_template: &deploy_template
   stage: deploy
   variables:
     GIT_STRATEGY: none
-  only:
-    - main
   before_script:
     - apt-get update -qq
     - apt-get install -qq git openssh-client
@@ -14,25 +12,56 @@ deploy:
     - echo "$SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
     - mkdir -p ~/.ssh
     - echo -e "Host *\n\tStrictHostKeyChecking no\n" > ~/.ssh/config
-  script:
-    - |
-      ssh -o StrictHostKeyChecking=no -T $SSH_USER@$SSH_SERVER_IP <<EOSSH
-      set -e
-      echo "Deploying $SERVICE_NAME..."
-      rm -rf $SERVICE_NAME || true
-      git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
-      cd $SERVICE_NAME
-      git checkout main
-      git pull origin main
+  script: |
+    ssh -o StrictHostKeyChecking=no -T $SSH_USER@$SSH_SERVER_IP <<'EOSSH'
+    set -e
+    echo "🚀 Deploying $SERVICE_NAME ..."
 
-      echo "🚀 Build Docker image..."
-      docker stop $SERVICE_NAME || true
-      docker rm $SERVICE_NAME || true
-      docker build --build-arg NODE_VERSION=20.19.1 -t $SERVICE_NAME:1.0 .
+    # Tên service theo nhánh
+    if [ "$CI_COMMIT_REF_NAME" = "dev" ]; then
+      SERVICE="${SERVICE_NAME}_dev"
+      APP_PORT=3001
+      BRANCH="dev"
+    else
+      SERVICE="$SERVICE_NAME"
+      APP_PORT=3000
+      BRANCH="main"
+    fi
 
-      echo "📦 Run container..."
-      docker run -d --name $SERVICE_NAME -p 3000:3000 $SERVICE_NAME:1.0
+    rm -rf $SERVICE || true
+    git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/dreamaxcompany/e-profile.git $SERVICE
+    cd $SERVICE
+    git checkout $BRANCH
 
-      docker ps -a
-      echo "✅ Deploy thành công"
-      EOSSH
+    IMAGE_NAME=$SERVICE:$(date +%Y%m%d%H%M%S)
+
+    echo "📦 Build Docker image..."
+    docker build --build-arg NODE_VERSION=20.19.1 -t $IMAGE_NAME .
+
+    echo "🛑 Stop old container..."
+    docker stop $SERVICE || true
+    docker rm $SERVICE || true
+
+    echo "▶️ Run new container..."
+    docker run -d \
+      --name $SERVICE \
+      --restart=always \
+      -p $APP_PORT:3000 \
+      $IMAGE_NAME
+
+    docker image prune -f
+    docker ps -a
+    echo "✅ Deploy thành công ($SERVICE trên port $APP_PORT)"
+    EOSSH
+
+# Job cho main
+deploy-main:
+  <<: *deploy_template
+  only:
+    - main
+
+# Job cho dev
+deploy-dev:
+  <<: *deploy_template
+  only:
+    - dev
