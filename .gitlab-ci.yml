@@ -17,50 +17,48 @@ stages:
     set -e
     echo "🚀 Deploying $SERVICE_NAME ..."
 
-    # Tên service theo nhánh
+    # Xác định service name và port theo branch
     if [ "$CI_COMMIT_REF_NAME" = "dev" ]; then
-      SERVICE="${SERVICE_NAME}_dev"
+      SERVICE_NAME="${SERVICE_NAME}_dev"
       APP_PORT=3001
       BRANCH="dev"
     else
-      SERVICE="$SERVICE_NAME"
+      SERVICE_NAME="$SERVICE_NAME"
       APP_PORT=3000
       BRANCH="main"
     fi
 
-    rm -rf $SERVICE || true
-    git clone https://oauth2:$GITLAB_TOKEN@gitlab.com/dreamaxcompany/e-profile.git $SERVICE
-    cd $SERVICE
+    rm -rf $SERVICE_NAME || true
+    git clone https://oauth2:${GITLAB_TOKEN}@gitlab.com/dreamaxcompany/e-profile.git $SERVICE_NAME
+    cd $SERVICE_NAME
     git checkout $BRANCH
 
-    IMAGE_NAME=$SERVICE:$(date +%Y%m%d%H%M%S)
+    IMAGE_NAME=$SERVICE_NAME:$(date +%Y%m%d%H%M%S)
 
     echo "📦 Build Docker image..."
     docker build --build-arg NODE_VERSION=20.19.1 -t $IMAGE_NAME .
 
     echo "🛑 Stop old container..."
-    docker stop $SERVICE || true
-    docker rm $SERVICE || true
+    docker stop $SERVICE_NAME || true
+    docker rm $SERVICE_NAME || true
 
     echo "▶️ Run new container..."
     docker run -d \
-      --name $SERVICE \
+      --name $SERVICE_NAME \
       --restart=always \
       -p $APP_PORT:3000 \
       $IMAGE_NAME
 
     docker image prune -f
     docker ps -a
-    echo "✅ Deploy thành công ($SERVICE trên port $APP_PORT)"
+    echo "✅ Deploy thành công ($SERVICE_NAME trên port $APP_PORT)"
     EOSSH
 
-# Job cho main
 deploy-main:
   <<: *deploy_template
   only:
     - main
 
-# Job cho dev
 deploy-dev:
   <<: *deploy_template
   only:
