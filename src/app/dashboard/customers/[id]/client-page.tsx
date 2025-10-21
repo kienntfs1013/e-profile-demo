@@ -24,6 +24,13 @@ const TrainingSection = dynamic(
 	() => import("@/components/customer-detail/training-section").then((m) => m.TrainingSection),
 	{ ssr: false, loading: () => <Box p={2}>Đang tải mục Tập luyện…</Box> }
 );
+const PersonalMediaSection = dynamic(
+	() => import("@/components/customer-detail/personal-media-section").then((m) => m.PersonalMediaSection),
+	{
+		ssr: false,
+		loading: () => <Box p={2}>Đang tải mục Truyền thông…</Box>,
+	}
+);
 const AchievementSection = dynamic(
 	() => import("@/components/customer-detail/achievement-section").then((m) => m.AchievementSection),
 	{ ssr: false, loading: () => <Box p={2}>Đang tải mục Thành tích…</Box> }
@@ -53,11 +60,12 @@ type DetailUser = {
 	createdAt?: string;
 	address?: { street?: string; city?: string; state?: string };
 };
-type TabKey = "general" | "health" | "training" | "achievement";
+type TabKey = "general" | "health" | "training" | "media" | "achievement";
 const TABS: { key: TabKey; label: string }[] = [
 	{ key: "general", label: "Thông tin chung" },
 	{ key: "health", label: "Sức khỏe" },
 	{ key: "training", label: "Tập luyện" },
+	{ key: "media", label: "Truyền thông" },
 	{ key: "achievement", label: "Thành tích" },
 ];
 
@@ -123,6 +131,7 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 		const run = () => {
 			import("@/components/customer-detail/health-section");
 			import("@/components/customer-detail/training-section");
+			import("@/components/customer-detail/personal-media-section");
 			import("@/components/customer-detail/achievement-section");
 		};
 		if (typeof window !== "undefined") {
@@ -264,8 +273,8 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 								color="primary"
 								disableElevation
 								sx={{
-									flexBasis: "25%",
-									maxWidth: "25%",
+									flexBasis: "20%",
+									maxWidth: "20%",
 									borderRadius: 2,
 									textTransform: "none",
 									fontWeight: 600,
@@ -295,9 +304,9 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 
 			<SectionCard>
 				{tab === "general" && <GeneralSection id={user.id} />}
-
 				{detailIsAthlete && !viewerIsAthlete && tab === "health" && <HealthSection id={user.id} />}
 				{detailIsAthlete && !viewerIsAthlete && tab === "training" && <TrainingSection id={user.id} />}
+				{detailIsAthlete && !viewerIsAthlete && tab === "media" && <PersonalMediaSection id={user.id} />}
 				{detailIsAthlete && !viewerIsAthlete && tab === "achievement" && <AchievementSection id={user.id} />}
 
 				{isPending && (

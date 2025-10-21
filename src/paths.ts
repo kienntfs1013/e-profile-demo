@@ -13,6 +13,7 @@ export const paths = {
 		training: "/dashboard/training",
 		health: "/dashboard/health",
 		achievement: "/dashboard/achievement",
+		media: "/dashboard/media",
 		account: "/dashboard/account",
 		customers: "/dashboard/customers",
 		coaches: "/dashboard/coaches",

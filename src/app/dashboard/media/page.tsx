@@ -2,23 +2,16 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import {
-	listArcheryCompetitionsByAthlete,
-	listBoxingCompetitionsByAthlete,
-	listShootingCompetitionsByAthlete,
-	listTaekwondoCompetitionsByAthlete,
-	type ArcheryCompetitionDTO,
-	type BoxingCompetitionDTO,
-	type ShootingCompetitionDTO,
-	type TaekwondoCompetitionDTO,
-} from "@/services/competition.service";
+import { listMediaByAthlete, type MediaDTO } from "@/services/media.service";
 import { getLoggedInUserId, getUserById } from "@/services/user.service";
+import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardHeader from "@mui/material/CardHeader";
 import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
+import Link from "@mui/material/Link";
 import MenuItem from "@mui/material/MenuItem";
 import Stack from "@mui/material/Stack";
 import type { SxProps } from "@mui/material/styles";
@@ -35,8 +28,8 @@ import "dayjs/locale/vi";
 
 dayjs.locale("vi");
 
-type SportKey = "shooting" | "archery" | "boxing" | "taekwondo";
-type Row = ArcheryCompetitionDTO | BoxingCompetitionDTO | ShootingCompetitionDTO | TaekwondoCompetitionDTO;
+type SortKey = "newest" | "oldest";
+type MediaTypeKey = "" | "image" | "video" | "social" | "weblink" | "document" | "other";
 
 function SectionCard({
 	title,
@@ -58,63 +51,33 @@ function SectionCard({
 	);
 }
 
-function parseResult(v?: string) {
-	if (!v) return "—";
-	try {
-		const o = JSON.parse(v);
-		if (o && typeof o === "object") {
-			return Object.entries(o)
-				.slice(0, 4)
-				.map(([k, val]) => `${k}: ${val}`)
-				.join(", ");
-		}
-	} catch {}
-	return v;
-}
-
-function getWhen(r: any): string {
-	return (r?.recorded_at as string) || (r?.created_at as string) || "";
+function getWhen(r: MediaDTO): string {
+	return (r.posted_date as string) || (r.created_at as string) || "";
 }
 
 export default function Page() {
 	const router = useRouter();
 
-	const [sort, setSort] = React.useState<"newest" | "oldest">("newest");
+	const [sort, setSort] = React.useState<SortKey>("newest");
 	const [search, setSearch] = React.useState<string>("");
 	const searchDeferred = React.useDeferredValue(search);
 	const [date, setDate] = React.useState<string>("");
+	const [mediaType, setMediaType] = React.useState<MediaTypeKey>("");
 
-	const [arch, setArch] = React.useState<ArcheryCompetitionDTO[]>([]);
-	const [shoot, setShoot] = React.useState<ShootingCompetitionDTO[]>([]);
-	const [box, setBox] = React.useState<BoxingCompetitionDTO[]>([]);
-	const [tkd, setTkd] = React.useState<TaekwondoCompetitionDTO[]>([]);
-
+	const [rows, setRows] = React.useState<MediaDTO[]>([]);
 	const [loading, setLoading] = React.useState(false);
 	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(5);
-
 	const [athleteId, setAthleteId] = React.useState<number | undefined>(undefined);
-	const [sportKey, setSportKey] = React.useState<SportKey | "">("");
 
 	React.useEffect(() => {
 		let cancelled = false;
 		(async () => {
 			const uid = getLoggedInUserId();
 			if (!uid) return;
-
 			const user = await getUserById(uid).catch(() => null);
 			if (!user || cancelled) return;
-
 			setAthleteId(user.id);
-
-			const s = String(user.sport || "")
-				.toLowerCase()
-				.trim();
-			if (s === "shooting" || s.includes("bắn súng")) setSportKey("shooting");
-			else if (s === "archery" || s.includes("bắn cung")) setSportKey("archery");
-			else if (s === "taekwondo") setSportKey("taekwondo");
-			else if (s === "boxing") setSportKey("boxing");
-			else setSportKey("");
 		})();
 		return () => {
 			cancelled = true;
@@ -124,22 +87,11 @@ export default function Page() {
 	React.useEffect(() => {
 		let cancelled = false;
 		async function load() {
-			if (!athleteId || !sportKey) return;
+			if (!athleteId) return;
 			setLoading(true);
 			try {
-				if (sportKey === "archery") {
-					const r = await listArcheryCompetitionsByAthlete(athleteId, "id-desc");
-					if (!cancelled) setArch(r);
-				} else if (sportKey === "shooting") {
-					const r = await listShootingCompetitionsByAthlete(athleteId, "id-desc");
-					if (!cancelled) setShoot(r);
-				} else if (sportKey === "boxing") {
-					const r = await listBoxingCompetitionsByAthlete(athleteId, "id-desc");
-					if (!cancelled) setBox(r);
-				} else if (sportKey === "taekwondo") {
-					const r = await listTaekwondoCompetitionsByAthlete(athleteId, "id-desc");
-					if (!cancelled) setTkd(r);
-				}
+				const data = await listMediaByAthlete(athleteId, "media_id-desc");
+				if (!cancelled) setRows(data || []);
 			} finally {
 				if (!cancelled) setLoading(false);
 			}
@@ -148,34 +100,28 @@ export default function Page() {
 		return () => {
 			cancelled = true;
 		};
-	}, [athleteId, sportKey]);
+	}, [athleteId]);
 
 	React.useEffect(() => {
 		setPage(0);
-	}, [sportKey, searchDeferred, sort, date]);
-
-	const activeData = React.useMemo<Row[]>(() => {
-		if (sportKey === "archery") return arch;
-		if (sportKey === "shooting") return shoot;
-		if (sportKey === "boxing") return box;
-		if (sportKey === "taekwondo") return tkd;
-		return [];
-	}, [sportKey, arch, shoot, box, tkd]);
+	}, [searchDeferred, sort, date, mediaType]);
 
 	const dateObj = React.useMemo(() => (date ? dayjs(date) : null), [date]);
 
 	const filteredSorted = React.useMemo(() => {
-		if (!activeData.length) return [] as Row[];
+		if (!rows.length) return [] as MediaDTO[];
 
 		const byDate = dateObj
-			? activeData.filter((r: any) => {
+			? rows.filter((r) => {
 					const when = getWhen(r);
 					if (!when) return false;
 					return dayjs(when).isSame(dateObj, "day");
 				})
-			: activeData;
+			: rows;
 
-		const bySort = [...byDate].sort((a: any, b: any) => {
+		const byType = mediaType ? byDate.filter((r) => r.media_type === mediaType) : byDate;
+
+		const bySort = [...byType].sort((a, b) => {
 			const da = getWhen(a);
 			const db = getWhen(b);
 			return sort === "newest" ? db.localeCompare(da) : da.localeCompare(db);
@@ -185,40 +131,31 @@ export default function Page() {
 		if (!q) return bySort;
 
 		return bySort.filter((r) => {
-			const buf = [
-				(r as any).competition_id,
-				(r as any).medal_won,
-				(r as any).final_rank,
-				(r as any).notes,
-				(r as any).result_data,
-				getWhen(r),
-			]
+			const buf = [r.title, r.platform_name, r.media_type, r.media_url, r.thumbnail_url, getWhen(r)]
 				.filter(Boolean)
 				.join(" ")
 				.toLowerCase();
-
 			return buf.includes(q);
 		});
-	}, [activeData, dateObj, sort, searchDeferred]);
+	}, [rows, dateObj, mediaType, sort, searchDeferred]);
 
 	const pagedRows = React.useMemo(
 		() => filteredSorted.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
 		[filteredSorted, page, rowsPerPage]
 	);
 
-	const TableShell = (props: { title: string; showRecordedAt?: boolean }) => {
-		const { title, showRecordedAt } = props;
+	const TableShell = () => {
 		return (
-			<SectionCard title={title}>
+			<SectionCard title="Media — Tư liệu vận động viên">
 				<Table sx={{ minWidth: 1100 }}>
 					<TableHead>
 						<TableRow>
-							<TableCell>Giải đấu</TableCell>
-							<TableCell>Huy chương</TableCell>
-							<TableCell>Hạng</TableCell>
-							<TableCell>Kết quả</TableCell>
-							<TableCell>Ghi chú</TableCell>
-							<TableCell>{showRecordedAt ? "Ngày ghi nhận" : "Ngày tạo"}</TableCell>
+							<TableCell style={{ width: 64 }}>Ảnh</TableCell>
+							<TableCell>Tiêu đề</TableCell>
+							<TableCell>Loại</TableCell>
+							<TableCell>Nền tảng</TableCell>
+							<TableCell>Ngày đăng</TableCell>
+							<TableCell>Liên kết</TableCell>
 						</TableRow>
 					</TableHead>
 					<TableBody>
@@ -231,16 +168,39 @@ export default function Page() {
 								</TableCell>
 							</TableRow>
 						) : pagedRows.length ? (
-							pagedRows.map((r: any) => {
-								const when = showRecordedAt ? r.recorded_at || r.created_at : r.created_at;
+							pagedRows.map((r) => {
+								const when = getWhen(r);
 								return (
 									<TableRow key={r.id} hover>
-										<TableCell>{r.competition_id ?? "—"}</TableCell>
-										<TableCell>{r.medal_won ?? "—"}</TableCell>
-										<TableCell>{r.final_rank != null ? <Chip size="small" label={r.final_rank} /> : "—"}</TableCell>
-										<TableCell>{parseResult(r.result_data)}</TableCell>
-										<TableCell>{r.notes || "—"}</TableCell>
+										<TableCell>
+											{r.thumbnail_url ? (
+												<Avatar
+													variant="rounded"
+													src={r.thumbnail_url}
+													alt={r.title || ""}
+													sx={{ width: 48, height: 48 }}
+												/>
+											) : (
+												<Avatar variant="rounded" sx={{ width: 48, height: 48 }}>
+													{(r.media_type || "?").slice(0, 1).toUpperCase()}
+												</Avatar>
+											)}
+										</TableCell>
+										<TableCell>{r.title || "—"}</TableCell>
+										<TableCell>
+											<Chip size="small" label={r.media_type} />
+										</TableCell>
+										<TableCell>{r.platform_name || "—"}</TableCell>
 										<TableCell>{when ? dayjs(when).format("DD/MM/YYYY") : "—"}</TableCell>
+										<TableCell>
+											{r.media_url ? (
+												<Link href={r.media_url} target="_blank" rel="noopener noreferrer">
+													Mở liên kết
+												</Link>
+											) : (
+												"—"
+											)}
+										</TableCell>
 									</TableRow>
 								);
 							})
@@ -289,10 +249,28 @@ export default function Page() {
 					size="small"
 					sx={{ flex: { md: 1 } }}
 				/>
+
+				<TextField
+					select
+					label="Loại media"
+					value={mediaType}
+					onChange={(e) => setMediaType(e.target.value as MediaTypeKey)}
+					size="small"
+					sx={{ width: { xs: "100%", md: 220 } }}
+				>
+					<MenuItem value="">Tất cả</MenuItem>
+					<MenuItem value="image">Hình ảnh</MenuItem>
+					<MenuItem value="video">Video</MenuItem>
+					<MenuItem value="social">Mạng xã hội</MenuItem>
+					<MenuItem value="weblink">Liên kết</MenuItem>
+					<MenuItem value="document">Tài liệu</MenuItem>
+					<MenuItem value="other">Khác</MenuItem>
+				</TextField>
+
 				<Stack direction="row" spacing={1.5} sx={{ width: { xs: "100%", md: "auto" } }}>
 					<TextField
 						type="date"
-						label="Ngày"
+						label="Ngày đăng"
 						value={date}
 						onChange={(e) => setDate(e.target.value)}
 						InputLabelProps={{ shrink: true }}
@@ -307,11 +285,12 @@ export default function Page() {
 						Xóa ngày
 					</Button>
 				</Stack>
+
 				<TextField
 					select
 					label="Sắp xếp thời gian"
 					value={sort}
-					onChange={(e) => setSort(e.target.value as "newest" | "oldest")}
+					onChange={(e) => setSort(e.target.value as SortKey)}
 					size="small"
 					sx={{ width: { xs: "100%", md: 200 } }}
 				>
@@ -320,14 +299,11 @@ export default function Page() {
 				</TextField>
 			</Stack>
 
-			{sportKey === "archery" && <TableShell title="Bắn cung — Thành tích thi đấu" showRecordedAt />}
-			{sportKey === "shooting" && <TableShell title="Bắn súng — Thành tích thi đấu" />}
-			{sportKey === "boxing" && <TableShell title="Boxing — Thành tích thi đấu" />}
-			{sportKey === "taekwondo" && <TableShell title="Taekwondo — Thành tích thi đấu" showRecordedAt />}
+			<TableShell />
 
-			{!sportKey && (
+			{!athleteId && (
 				<Box p={2} textAlign="center" color="text.secondary" border="1px dashed" borderRadius={1.5}>
-					Không xác định bộ môn của vận động viên.
+					Không xác định vận động viên đang đăng nhập.
 				</Box>
 			)}
 		</Stack>

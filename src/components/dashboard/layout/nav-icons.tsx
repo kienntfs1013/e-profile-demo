@@ -2,6 +2,7 @@ import type { Icon } from "@phosphor-icons/react/dist/lib/types";
 import { Barbell } from "@phosphor-icons/react/dist/ssr/Barbell";
 import { Briefcase } from "@phosphor-icons/react/dist/ssr/Briefcase";
 import { ChartPieIcon } from "@phosphor-icons/react/dist/ssr/ChartPie";
+import { FilmStrip } from "@phosphor-icons/react/dist/ssr/FilmStrip"; // ⬅️ NEW
 import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
 import { HeartbeatIcon } from "@phosphor-icons/react/dist/ssr/Heartbeat";
 import { Info } from "@phosphor-icons/react/dist/ssr/Info";
@@ -27,4 +28,5 @@ export const navIcons = {
 	info: Info,
 	briefcase: Briefcase,
 	trophy: Trophy,
+	media: FilmStrip,
 } as Record<string, Icon>;

@@ -69,6 +69,12 @@ export const navItems = [
 		icon: "medal",
 	},
 	{
+		key: "media",
+		title: "Truyền thông",
+		href: paths.dashboard.media,
+		icon: "media",
+	},
+	{
 		key: "logout",
 		title: "Đăng xuất",
 		href: paths.auth.signIn,
