@@ -194,7 +194,7 @@ export function PersonalMediaSection({ id }: { id?: number | string }) {
   const TableShell = () => {
     return (
       <SectionCard
-        title="Media — Tư liệu vận động viên"
+        title="Media — Truyền thông cá nhân"
         header={
           <Button onClick={handleAdd} startIcon={<Plus />} size="small" variant="contained">
             Thêm mới

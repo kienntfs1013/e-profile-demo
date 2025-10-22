@@ -146,7 +146,7 @@ export default function Page() {
 
 	const TableShell = () => {
 		return (
-			<SectionCard title="Media — Tư liệu vận động viên">
+			<SectionCard title="Media — Truyền thông cá nhân">
 				<Table sx={{ minWidth: 1100 }}>
 					<TableHead>
 						<TableRow>
