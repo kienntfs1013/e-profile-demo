@@ -21,12 +21,12 @@ deploy:
       DEPLOY_NAME="$SERVICE_NAME"
       IMAGE_TAG="prod"
       GIT_BRANCH="main"
-      PORT=3366
+      PORT=3000
     elif [ "$CI_COMMIT_BRANCH" = "dev" ]; then
       DEPLOY_NAME="${SERVICE_NAME}_dev"
       IMAGE_TAG="dev"
       GIT_BRANCH="dev"
-      PORT=3367
+      PORT=3001
     else
       echo "❌ Nhánh $CI_COMMIT_BRANCH không được cấu hình để deploy."
       exit 1
@@ -47,7 +47,7 @@ deploy:
     docker build --build-arg NODE_VERSION=20.19.1 -t $DEPLOY_NAME:$IMAGE_TAG .
 
     echo "📦 Run container..."
-    docker run -d --name $DEPLOY_NAME -p $PORT:3366 $DEPLOY_NAME:$IMAGE_TAG
+    docker run -d --name $DEPLOY_NAME -p $PORT:3000 $DEPLOY_NAME:$IMAGE_TAG
 
     docker ps -a
     echo "✅ Deploy thành công"
