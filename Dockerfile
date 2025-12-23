@@ -30,7 +30,7 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package*.json ./
 
-EXPOSE 3366
+EXPOSE 3000
 
 # Chạy Next.js ở production mode
 CMD ["npm", "start"]
