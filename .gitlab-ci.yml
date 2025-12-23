@@ -21,7 +21,7 @@ deploy:
       DEPLOY_NAME="$SERVICE_NAME"
       IMAGE_TAG="prod"
       GIT_BRANCH="main"
-      PORT=3000
+      PORT=3100
     elif [ "$CI_COMMIT_BRANCH" = "dev" ]; then
       DEPLOY_NAME="${SERVICE_NAME}_dev"
       IMAGE_TAG="dev"
