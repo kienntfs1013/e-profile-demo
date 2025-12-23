@@ -26,7 +26,7 @@ deploy:
       DEPLOY_NAME="${SERVICE_NAME}_dev"
       IMAGE_TAG="dev"
       GIT_BRANCH="dev"
-      PORT=3001
+      PORT=3366
     else
       echo "❌ Nhánh $CI_COMMIT_BRANCH không được cấu hình để deploy."
       exit 1
