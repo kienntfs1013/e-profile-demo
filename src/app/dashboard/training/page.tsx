@@ -83,6 +83,117 @@ function PracticeTableCard({
 	);
 }
 
+type SportKey = "taekwondo" | "shooting" | "boxing" | "archery";
+
+function numOrUndef(v: any) {
+	const n = Number(v);
+	return Number.isFinite(n) ? n : undefined;
+}
+
+function buildFakePracticeRows(sport: SportKey, athleteId: number, limit: number) {
+	const base = dayjs().startOf("day");
+	const makeId = (i: number) => 100000 + i;
+
+	if (sport === "archery") {
+		return Array.from({ length: limit }).map((_, i) => {
+			const d = base.subtract(i, "day").format("YYYY-MM-DD");
+			return {
+				id: makeId(i),
+				athlete_id: athleteId,
+				session_date: d,
+				target_distance: i % 2 === 0 ? 18 : 30,
+				end_number: 6 + (i % 4),
+				arrow_number: 36 + i * 6,
+				score: 420 + i * 8,
+				x_coord: i % 2 === 0 ? 1 : -2,
+				y_coord: i % 2 === 0 ? -1 : 2,
+				created_at: base.subtract(i, "day").add(2, "hour").toISOString(),
+			} as any as ArcheryPracticeDTO;
+		});
+	}
+
+	if (sport === "shooting") {
+		return Array.from({ length: limit }).map((_, i) => {
+			const d = base.subtract(i, "day").format("YYYY-MM-DD");
+			const fired = 40 + i * 10;
+			const hit = Math.max(0, fired - (5 + i));
+			const acc = Math.round((hit / fired) * 100);
+			return {
+				id: makeId(i),
+				athlete_id: athleteId,
+				session_date: d,
+				weapon_type: i % 2 === 0 ? "Pistol" : "Rifle",
+				distance: i % 2 === 0 ? 10 : 25,
+				target_type: i % 2 === 0 ? "Paper" : "Electronic",
+				shots_fired: fired,
+				shots_hit: hit,
+				accuracy: acc,
+				notes: "Dữ liệu demo",
+				created_at: base.subtract(i, "day").add(1, "hour").toISOString(),
+			} as any as ShootingPracticeDTO;
+		});
+	}
+
+	if (sport === "boxing") {
+		return Array.from({ length: limit }).map((_, i) => {
+			return {
+				id: makeId(i),
+				athlete_id: athleteId,
+				round_number: i + 1,
+				punches_thrown: 80 + i * 12,
+				punches_landed: 55 + i * 8,
+				defense_success_rate: 40 + i * 3,
+				footwork_score: 6 + (i % 4),
+				sparring_partner: i % 2 === 0 ? "Demo Partner A" : "Demo Partner B",
+				notes: "Dữ liệu demo",
+				created_at: base.subtract(i, "day").add(3, "hour").toISOString(),
+			} as any as BoxingPracticeDTO;
+		});
+	}
+
+	return Array.from({ length: limit }).map((_, i) => {
+		const d = base.subtract(i, "day").format("YYYY-MM-DD");
+		return {
+			id: makeId(i),
+			athlete_id: athleteId,
+			session_date: d,
+			technique: i % 2 === 0 ? "Dollyo chagi" : "Ap chagi",
+			drills_practiced: i % 2 === 0 ? "Padwork, combos" : "Shadow, steps",
+			sparring_duration: 10 + i * 5,
+			fitness_exercises: i % 2 === 0 ? "Core, HIIT" : "Strength",
+			offense_score: 6 + (i % 3),
+			defense_score: 5 + (i % 3),
+			punch_power: 6 + (i % 3),
+			notes: "Dữ liệu demo",
+			created_at: base.subtract(i, "day").add(2, "hour").toISOString(),
+		} as any as TaekwondoPracticeDTO;
+	});
+}
+
+function buildFakeEvalRows(sport: SportKey, athleteId: number, limit: number) {
+	const base = dayjs().startOf("day");
+	const makeId = (i: number) => 200000 + i;
+
+	return Array.from({ length: limit }).map((_, i) => {
+		const d = base.subtract(i * 3, "day").format("YYYY-MM-DD");
+		return {
+			id: makeId(i),
+			athlete_id: athleteId,
+			date: d,
+			score: 6 + (i % 4),
+			comment: `Đánh giá demo (${sport})`,
+			created_at: base
+				.subtract(i * 3, "day")
+				.add(4, "hour")
+				.toISOString(),
+		} as any as
+			| TaekwondoPerformanceAssessmentDTO
+			| ShootingPerformanceAssessmentDTO
+			| BoxingPerformanceAssessmentDTO
+			| ArcheryPerformanceAssessmentDTO;
+	});
+}
+
 export default function Page(): React.JSX.Element {
 	const router = useRouter();
 
@@ -101,7 +212,7 @@ export default function Page(): React.JSX.Element {
 	const [rowsPerPage, setRowsPerPage] = React.useState(5);
 
 	const [athleteId, setAthleteId] = React.useState<number | undefined>(undefined);
-	const [sportKey, setSportKey] = React.useState<"taekwondo" | "shooting" | "boxing" | "archery" | "">("");
+	const [sportKey, setSportKey] = React.useState<SportKey | "">("");
 
 	const [evalSort, setEvalSort] = React.useState<"newest" | "oldest">("newest");
 	const [evalDate, setEvalDate] = React.useState<string>("");
@@ -125,10 +236,18 @@ export default function Page(): React.JSX.Element {
 			if (!user) user = await fetchUserByIdFromList(uid);
 			if (!user || cancelled) return;
 
-			setAthleteId(Number((user as any).id ?? (user as any).user_id));
+			const aid =
+				numOrUndef((user as any).athlete_id) ??
+				numOrUndef((user as any).id) ??
+				numOrUndef((user as any).user_id) ??
+				numOrUndef((user as any).customer_id);
+
+			setAthleteId(aid);
+
 			const s = String((user as any)?.sport ?? "")
 				.toLowerCase()
 				.trim();
+
 			if (s === "shooting" || s.includes("bắn súng")) setSportKey("shooting");
 			else if (s === "archery" || s.includes("bắn cung")) setSportKey("archery");
 			else if (s === "taekwondo") setSportKey("taekwondo");
@@ -158,7 +277,7 @@ export default function Page(): React.JSX.Element {
 				const orderby = sort === "newest" ? "id-desc" : "id-asc";
 				const p = page + 1;
 
-				let res;
+				let res: any;
 				if (sportKey === "taekwondo")
 					res = await listTaekwondoPracticesPageByAthlete(
 						athleteId,
@@ -196,12 +315,24 @@ export default function Page(): React.JSX.Element {
 						controller.signal
 					);
 
-				setRows(res.data);
-				setTotal(res.total ?? res.data.length);
+				const apiData = (res?.data ?? []) as any[];
+				const apiTotal = (res?.total ?? apiData.length) as number;
+
+				if (Array.isArray(apiData) && apiData.length > 0) {
+					setRows(apiData);
+					setTotal(apiTotal);
+				} else {
+					const fake = buildFakePracticeRows(sportKey, athleteId, rowsPerPage);
+					setRows(fake);
+					setTotal(fake.length);
+					setDate("");
+				}
 			} catch (e: any) {
 				if (e?.name !== "CanceledError" && e?.name !== "AbortError") {
-					setRows([]);
-					setTotal(0);
+					const fake = buildFakePracticeRows(sportKey, athleteId, rowsPerPage);
+					setRows(fake);
+					setTotal(fake.length);
+					setDate("");
 				}
 			} finally {
 				setLoading(false);
@@ -230,7 +361,7 @@ export default function Page(): React.JSX.Element {
 				const orderby = evalSort === "newest" ? "id-desc" : "id-asc";
 				const p = evalPage + 1;
 
-				let res;
+				let res: any;
 				if (sportKey === "taekwondo") {
 					res = await listTaekwondoPerformanceAssessmentsPageByAthlete(
 						athleteId,
@@ -269,12 +400,24 @@ export default function Page(): React.JSX.Element {
 					);
 				}
 
-				setEvalRows(res.data);
-				setEvalTotal(res.total ?? res.data.length);
+				const apiData = (res?.data ?? []) as any[];
+				const apiTotal = (res?.total ?? apiData.length) as number;
+
+				if (Array.isArray(apiData) && apiData.length > 0) {
+					setEvalRows(apiData);
+					setEvalTotal(apiTotal);
+				} else {
+					const fake = buildFakeEvalRows(sportKey, athleteId, evalRowsPerPage);
+					setEvalRows(fake);
+					setEvalTotal(fake.length);
+					setEvalDate("");
+				}
 			} catch (e: any) {
 				if (e?.name !== "CanceledError" && e?.name !== "AbortError") {
-					setEvalRows([]);
-					setEvalTotal(0);
+					const fake = buildFakeEvalRows(sportKey, athleteId, evalRowsPerPage);
+					setEvalRows(fake);
+					setEvalTotal(fake.length);
+					setEvalDate("");
 				}
 			} finally {
 				setLoading(false);

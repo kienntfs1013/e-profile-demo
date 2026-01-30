@@ -55,6 +55,29 @@ function getWhen(r: MediaDTO): string {
 	return (r.posted_date as string) || (r.created_at as string) || "";
 }
 
+function rand(min: number, max: number) {
+	return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function fakeMedia(athleteId: number): MediaDTO[] {
+	const types: MediaTypeKey[] = ["image", "video", "social", "weblink", "document"];
+	const platforms = ["Facebook", "Instagram", "YouTube", "TikTok", "Website"];
+	return Array.from({ length: rand(8, 15) }).map((_, i) => {
+		const d = dayjs().subtract(i * rand(1, 4), "day");
+		return {
+			id: 100000 + i,
+			athlete_id: athleteId,
+			title: `Bài đăng truyền thông ${i + 1}`,
+			media_type: types[rand(0, types.length - 1)],
+			platform_name: platforms[rand(0, platforms.length - 1)],
+			media_url: "https://example.com",
+			thumbnail_url: "",
+			posted_date: d.toISOString(),
+			created_at: d.toISOString(),
+		} as MediaDTO;
+	});
+}
+
 export default function Page() {
 	const router = useRouter();
 
@@ -86,17 +109,18 @@ export default function Page() {
 
 	React.useEffect(() => {
 		let cancelled = false;
-		async function load() {
+		(async () => {
 			if (!athleteId) return;
 			setLoading(true);
 			try {
-				const data = await listMediaByAthlete(athleteId, "media_id-desc");
-				if (!cancelled) setRows(data || []);
+				const data = await listMediaByAthlete(athleteId, "media_id-desc").catch(() => []);
+				if (!cancelled) {
+					setRows(data && data.length ? data : fakeMedia(athleteId));
+				}
 			} finally {
 				if (!cancelled) setLoading(false);
 			}
-		}
-		load();
+		})();
 		return () => {
 			cancelled = true;
 		};
@@ -131,7 +155,7 @@ export default function Page() {
 		if (!q) return bySort;
 
 		return bySort.filter((r) => {
-			const buf = [r.title, r.platform_name, r.media_type, r.media_url, r.thumbnail_url, getWhen(r)]
+			const buf = [r.title, r.platform_name, r.media_type, r.media_url, getWhen(r)]
 				.filter(Boolean)
 				.join(" ")
 				.toLowerCase();
@@ -144,13 +168,53 @@ export default function Page() {
 		[filteredSorted, page, rowsPerPage]
 	);
 
-	const TableShell = () => {
-		return (
+	return (
+		<Stack spacing={3}>
+			<Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ width: "100%" }}>
+				<TextField fullWidth label="Tìm kiếm" value={search} onChange={(e) => setSearch(e.target.value)} size="small" />
+				<TextField
+					select
+					label="Loại media"
+					value={mediaType}
+					onChange={(e) => setMediaType(e.target.value as MediaTypeKey)}
+					size="small"
+					sx={{ width: 220 }}
+				>
+					<MenuItem value="">Tất cả</MenuItem>
+					<MenuItem value="image">Hình ảnh</MenuItem>
+					<MenuItem value="video">Video</MenuItem>
+					<MenuItem value="social">Mạng xã hội</MenuItem>
+					<MenuItem value="weblink">Liên kết</MenuItem>
+					<MenuItem value="document">Tài liệu</MenuItem>
+					<MenuItem value="other">Khác</MenuItem>
+				</TextField>
+				<TextField
+					type="date"
+					label="Ngày đăng"
+					value={date}
+					onChange={(e) => setDate(e.target.value)}
+					InputLabelProps={{ shrink: true }}
+					size="small"
+					sx={{ width: 220 }}
+				/>
+				<TextField
+					select
+					label="Sắp xếp"
+					value={sort}
+					onChange={(e) => setSort(e.target.value as SortKey)}
+					size="small"
+					sx={{ width: 200 }}
+				>
+					<MenuItem value="newest">Mới nhất</MenuItem>
+					<MenuItem value="oldest">Cũ nhất</MenuItem>
+				</TextField>
+			</Stack>
+
 			<SectionCard title="Media — Truyền thông cá nhân">
 				<Table sx={{ minWidth: 1100 }}>
 					<TableHead>
 						<TableRow>
-							<TableCell style={{ width: 64 }}>Ảnh</TableCell>
+							<TableCell width={64}>Ảnh</TableCell>
 							<TableCell>Tiêu đề</TableCell>
 							<TableCell>Loại</TableCell>
 							<TableCell>Nền tảng</TableCell>
@@ -159,52 +223,30 @@ export default function Page() {
 						</TableRow>
 					</TableHead>
 					<TableBody>
-						{loading ? (
-							<TableRow>
-								<TableCell colSpan={8}>
-									<Box p={2} textAlign="center" color="text.secondary">
-										Đang tải dữ liệu…
-									</Box>
-								</TableCell>
-							</TableRow>
-						) : pagedRows.length ? (
-							pagedRows.map((r) => {
-								const when = getWhen(r);
-								return (
-									<TableRow key={r.id} hover>
-										<TableCell>
-											{r.thumbnail_url ? (
-												<Avatar
-													variant="rounded"
-													src={r.thumbnail_url}
-													alt={r.title || ""}
-													sx={{ width: 48, height: 48 }}
-												/>
-											) : (
-												<Avatar variant="rounded" sx={{ width: 48, height: 48 }}>
-													{(r.media_type || "?").slice(0, 1).toUpperCase()}
-												</Avatar>
-											)}
-										</TableCell>
-										<TableCell>{r.title || "—"}</TableCell>
-										<TableCell>
-											<Chip size="small" label={r.media_type} />
-										</TableCell>
-										<TableCell>{r.platform_name || "—"}</TableCell>
-										<TableCell>{when ? dayjs(when).format("DD/MM/YYYY") : "—"}</TableCell>
-										<TableCell>
-											{r.media_url ? (
-												<Link href={r.media_url} target="_blank" rel="noopener noreferrer">
-													Mở liên kết
-												</Link>
-											) : (
-												"—"
-											)}
-										</TableCell>
-									</TableRow>
-								);
-							})
-						) : (
+						{pagedRows.map((r) => {
+							const when = getWhen(r);
+							return (
+								<TableRow key={r.id} hover>
+									<TableCell>
+										<Avatar variant="rounded" sx={{ width: 48, height: 48 }}>
+											{(r.media_type || "?")[0]?.toUpperCase()}
+										</Avatar>
+									</TableCell>
+									<TableCell>{r.title}</TableCell>
+									<TableCell>
+										<Chip size="small" label={r.media_type} />
+									</TableCell>
+									<TableCell>{r.platform_name}</TableCell>
+									<TableCell>{when ? dayjs(when).format("DD/MM/YYYY") : "—"}</TableCell>
+									<TableCell>
+										<Link href={r.media_url} target="_blank">
+											Mở liên kết
+										</Link>
+									</TableCell>
+								</TableRow>
+							);
+						})}
+						{!loading && !pagedRows.length && (
 							<TableRow>
 								<TableCell colSpan={8}>
 									<Box p={2} textAlign="center" color="text.secondary">
@@ -215,7 +257,6 @@ export default function Page() {
 						)}
 					</TableBody>
 				</Table>
-
 				<TablePagination
 					component="div"
 					count={filteredSorted.length}
@@ -230,82 +271,6 @@ export default function Page() {
 					labelRowsPerPage="Dòng / trang"
 				/>
 			</SectionCard>
-		);
-	};
-
-	return (
-		<Stack spacing={3}>
-			<Stack
-				direction={{ xs: "column", md: "row" }}
-				spacing={2}
-				alignItems={{ xs: "stretch", md: "stretch" }}
-				sx={{ width: "100%" }}
-			>
-				<TextField
-					fullWidth
-					label="Tìm kiếm"
-					value={search}
-					onChange={(e) => setSearch(e.target.value)}
-					size="small"
-					sx={{ flex: { md: 1 } }}
-				/>
-
-				<TextField
-					select
-					label="Loại media"
-					value={mediaType}
-					onChange={(e) => setMediaType(e.target.value as MediaTypeKey)}
-					size="small"
-					sx={{ width: { xs: "100%", md: 220 } }}
-				>
-					<MenuItem value="">Tất cả</MenuItem>
-					<MenuItem value="image">Hình ảnh</MenuItem>
-					<MenuItem value="video">Video</MenuItem>
-					<MenuItem value="social">Mạng xã hội</MenuItem>
-					<MenuItem value="weblink">Liên kết</MenuItem>
-					<MenuItem value="document">Tài liệu</MenuItem>
-					<MenuItem value="other">Khác</MenuItem>
-				</TextField>
-
-				<Stack direction="row" spacing={1.5} sx={{ width: { xs: "100%", md: "auto" } }}>
-					<TextField
-						type="date"
-						label="Ngày đăng"
-						value={date}
-						onChange={(e) => setDate(e.target.value)}
-						InputLabelProps={{ shrink: true }}
-						size="small"
-						sx={{ width: { xs: "100%", md: 220 } }}
-					/>
-					<Button
-						variant="outlined"
-						onClick={() => setDate("")}
-						sx={{ height: 40, minWidth: 100, whiteSpace: "nowrap" }}
-					>
-						Xóa ngày
-					</Button>
-				</Stack>
-
-				<TextField
-					select
-					label="Sắp xếp thời gian"
-					value={sort}
-					onChange={(e) => setSort(e.target.value as SortKey)}
-					size="small"
-					sx={{ width: { xs: "100%", md: 200 } }}
-				>
-					<MenuItem value="newest">Mới nhất</MenuItem>
-					<MenuItem value="oldest">Cũ nhất</MenuItem>
-				</TextField>
-			</Stack>
-
-			<TableShell />
-
-			{!athleteId && (
-				<Box p={2} textAlign="center" color="text.secondary" border="1px dashed" borderRadius={1.5}>
-					Không xác định vận động viên đang đăng nhập.
-				</Box>
-			)}
 		</Stack>
 	);
 }

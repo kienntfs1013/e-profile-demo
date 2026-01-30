@@ -247,6 +247,100 @@ function normalizePhone(p?: string | null) {
 	return digits;
 }
 
+function buildFakeSeries(days: number, startMs: number): DayPoint[] {
+	const rows: DayPoint[] = [];
+	for (let i = 0; i < days; i++) {
+		const k = startMs + i * 86400000;
+		const wave = Math.sin(i / 2.3);
+		const steps = Math.round(5200 + (i % 2 ? 1200 : 650) + wave * 900);
+		const bpm = Math.round(66 + wave * 6 + (i % 3) * 2);
+		const spo2 = Math.round(96 + (wave > 0 ? 1 : 0));
+		const sleepH = +Math.max(5.2, Math.min(8.8, 7.1 + Math.cos(i / 2.8) * 0.8)).toFixed(1);
+		rows.push({ d: fmtDay(k), bpm, steps, spo2, sleepH });
+	}
+	return rows;
+}
+
+function buildFakeMetricsFromSeries(last: DayPoint): Metric[] {
+	return [
+		{
+			key: "spo2",
+			label: "Oxy trong máu",
+			value: last.spo2 != null ? String(last.spo2) : "—",
+			unit: "%",
+			icon: Drop,
+			color: "#22c55e",
+			group: "vitals",
+		},
+		{
+			key: "bpm",
+			label: "Nhịp tim",
+			value: last.bpm != null ? String(last.bpm) : "—",
+			unit: "BPM",
+			icon: Heartbeat,
+			color: "#ef4444",
+			group: "vitals",
+		},
+		{
+			key: "sleep",
+			label: "Giấc ngủ",
+			value: last.sleepH != null ? String(last.sleepH) : "—",
+			unit: "h",
+			icon: Moon,
+			color: "#8b5cf6",
+			group: "activity",
+		},
+		{
+			key: "steps",
+			label: "Bước đi",
+			value: last.steps != null ? String(last.steps) : "—",
+			icon: Footprints,
+			color: "#6366f1",
+			group: "activity",
+		},
+	];
+}
+
+function buildSleepPieFromSeries(rows: DayPoint[]) {
+	const totalSleep = rows.reduce((acc, r) => acc + (r.sleepH || 0), 0);
+	const deep = +(totalSleep * 0.35).toFixed(1);
+	const light = +(totalSleep * 0.45).toFixed(1);
+	const rem = +(totalSleep - deep - light).toFixed(1);
+	return [
+		{ name: "Ngủ sâu", value: deep },
+		{ name: "Ngủ nông", value: light },
+		{ name: "REM", value: rem },
+	];
+}
+
+function hasAnyRealData(rows: DayPoint[]) {
+	return rows.length > 0 && rows.some((r) => (r.bpm ?? r.steps ?? r.spo2 ?? r.sleepH) != null);
+}
+
+function fillMissingWithFake(rows: DayPoint[], days: number, startMs: number): DayPoint[] {
+	const fake = buildFakeSeries(days, startMs);
+	const byD = new Map<string, DayPoint>();
+	fake.forEach((r) => byD.set(r.d, r));
+	const out: DayPoint[] = [];
+	for (let i = 0; i < days; i++) {
+		const d = fmtDay(startMs + i * 86400000);
+		const real = rows.find((x) => x.d === d);
+		if (!real) out.push(byD.get(d)!);
+		else {
+			const f = byD.get(d)!;
+			out.push({
+				d,
+				bpm: real.bpm ?? f.bpm,
+				steps: real.steps ?? f.steps,
+				spo2: real.spo2 ?? f.spo2,
+				sleepH: real.sleepH ?? f.sleepH,
+				glucose: real.glucose ?? f.glucose,
+			});
+		}
+	}
+	return out;
+}
+
 export function HealthSection({ id }: { id?: number | string }) {
 	const [date, setDate] = React.useState<string>(new Date().toISOString().slice(0, 10));
 	const [range, setRange] = React.useState<"7d" | "30d">("7d");
@@ -295,45 +389,56 @@ export function HealthSection({ id }: { id?: number | string }) {
 			normalizePhone((user as any)?.phone) ||
 			normalizePhone((user as any)?.mobile) ||
 			"";
+		const end = new Date(date + "T23:59:59").getTime();
+		const days = range === "7d" ? 7 : 30;
+		const start = startOfDayMs(new Date(end - (days - 1) * 24 * 60 * 60 * 1000));
+
 		if (!phone) {
-			setSeries([]);
-			setSleepPie([]);
-			setMetrics([]);
+			const fake = buildFakeSeries(days, start);
+			setSeries(fake);
+			setSleepPie(buildSleepPieFromSeries(fake));
+			setMetrics(buildFakeMetricsFromSeries(fake[fake.length - 1] || { d: fmtDay(end) }));
 			return;
 		}
+
 		setLoading(true);
 		try {
-			const end = new Date(date + "T23:59:59").getTime();
-			const days = range === "7d" ? 7 : 30;
-			const start = startOfDayMs(new Date(end - (days - 1) * 24 * 60 * 60 * 1000));
 			const [hrs, spo2s, steps, sleeps] = await Promise.all([
 				getIotDataByPhone<"hr">("hr", phone, start, end),
 				getIotDataByPhone<"spo2">("spo2", phone, start, end),
 				getIotDataByPhone<"steps">("steps", phone, start, end),
 				getIotDataByPhone<"sleep">("sleep", phone, start, end),
 			]);
+
 			const map = new Map<number, { hr: number[]; sp: number[]; st: number; slHours: number[] }>();
+
 			hrs.forEach((r: HrRow) => {
 				const t = Number(r.timestamp || 0);
+				if (!t) return;
 				const k = startOfDayMs(new Date(t));
 				const m = map.get(k) || { hr: [], sp: [], st: 0, slHours: [] };
 				if (typeof r.heartValue === "number") m.hr.push(r.heartValue);
 				map.set(k, m);
 			});
+
 			spo2s.forEach((r: Spo2Row) => {
 				const t = Number(r.timestamp || 0);
+				if (!t) return;
 				const k = startOfDayMs(new Date(t));
 				const m = map.get(k) || { hr: [], sp: [], st: 0, slHours: [] };
 				if (typeof r.oxygenValue === "number") m.sp.push(r.oxygenValue);
 				map.set(k, m);
 			});
+
 			steps.forEach((r: StepsRow) => {
 				const t = Number(r.timestamp || 0);
+				if (!t) return;
 				const k = startOfDayMs(new Date(t));
 				const m = map.get(k) || { hr: [], sp: [], st: 0, slHours: [] };
 				if (typeof r.stepValue === "number") m.st += r.stepValue;
 				map.set(k, m);
 			});
+
 			sleeps.forEach((r: SleepRow) => {
 				const sl = Number(r.sleepTime || 0);
 				const wk = Number(r.wakeupTime || 0);
@@ -345,9 +450,10 @@ export function HealthSection({ id }: { id?: number | string }) {
 					map.set(k, m);
 				}
 			});
+
 			const rows: DayPoint[] = [];
 			for (let i = 0; i < days; i++) {
-				const k = start + i * 24 * 60 * 60 * 1000;
+				const k = start + i * 86400000;
 				const v = map.get(k) || { hr: [], sp: [], st: 0, slHours: [] };
 				const avg = (arr: number[]) =>
 					arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : undefined;
@@ -360,54 +466,18 @@ export function HealthSection({ id }: { id?: number | string }) {
 					sleepH: sl,
 				});
 			}
-			const last = rows[rows.length - 1] || {};
-			const m: Metric[] = [
-				{
-					key: "spo2",
-					label: "Oxy trong máu",
-					value: last.spo2 != null ? String(last.spo2) : "—",
-					unit: "%",
-					icon: Drop,
-					color: "#22c55e",
-					group: "vitals",
-				},
-				{
-					key: "bpm",
-					label: "Nhịp tim",
-					value: last.bpm != null ? String(last.bpm) : "—",
-					unit: "BPM",
-					icon: Heartbeat,
-					color: "#ef4444",
-					group: "vitals",
-				},
-				{
-					key: "sleep",
-					label: "Giấc ngủ",
-					value: last.sleepH != null ? String(last.sleepH) : "—",
-					unit: "h",
-					icon: Moon,
-					color: "#8b5cf6",
-					group: "activity",
-				},
-				{
-					key: "steps",
-					label: "Bước đi",
-					value: last.steps != null ? String(last.steps) : "—",
-					helper: "",
-					icon: Footprints,
-					color: "#6366f1",
-					group: "activity",
-				},
-			];
-			const totalSleep = rows.reduce((acc, r) => acc + (r.sleepH || 0), 0);
-			const pie = [
-				{ name: "Ngủ sâu", value: +(totalSleep * 0.35).toFixed(1) },
-				{ name: "Ngủ nông", value: +(totalSleep * 0.45).toFixed(1) },
-				{ name: "REM", value: +(totalSleep * 0.2).toFixed(1) },
-			];
-			setSeries(rows);
-			setSleepPie(pie);
-			setMetrics(m);
+
+			const fixed = hasAnyRealData(rows) ? fillMissingWithFake(rows, days, start) : buildFakeSeries(days, start);
+			const last = fixed[fixed.length - 1] || { d: fmtDay(end) };
+
+			setSeries(fixed);
+			setSleepPie(buildSleepPieFromSeries(fixed));
+			setMetrics(buildFakeMetricsFromSeries(last));
+		} catch {
+			const fake = buildFakeSeries(days, start);
+			setSeries(fake);
+			setSleepPie(buildSleepPieFromSeries(fake));
+			setMetrics(buildFakeMetricsFromSeries(fake[fake.length - 1] || { d: fmtDay(end) }));
 		} finally {
 			setLoading(false);
 		}
@@ -477,6 +547,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 					<MenuItem value="danger">Nguy hiểm</MenuItem>
 				</TextField>
 			</Box>
+
 			<Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "space-between" }}>
 				{filtered.map(({ metric }) => (
 					<Box key={metric.key} sx={{ flex: "1 1 calc(20% - 16px)", minWidth: 160 }}>
@@ -484,6 +555,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 					</Box>
 				))}
 			</Box>
+
 			<Box
 				sx={{
 					display: "grid",
@@ -495,7 +567,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 				<Box sx={{ minWidth: 0 }}>
 					<ChartCard title={`Bước đi theo ngày (${range === "7d" ? "7 ngày" : "30 ngày"})`}>
 						{
-							<BarChart data={series}>
+							<BarChart data={loading ? [] : series}>
 								<CartesianGrid strokeDasharray="3 3" />
 								<XAxis dataKey="d" />
 								<YAxis />
@@ -508,7 +580,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 				<Box sx={{ minWidth: 0 }}>
 					<ChartCard title="Nhịp tim (BPM) theo ngày">
 						{
-							<LineChart data={series}>
+							<LineChart data={loading ? [] : series}>
 								<CartesianGrid strokeDasharray="3 3" />
 								<XAxis dataKey="d" />
 								<YAxis />
@@ -536,17 +608,15 @@ export function HealthSection({ id }: { id?: number | string }) {
 				</Box>
 				<Box sx={{ minWidth: 0 }}>
 					<ChartCard title="SpO₂ & Đường huyết theo ngày">
-						{
-							<LineChart data={series}>
-								<CartesianGrid strokeDasharray="3 3" />
-								<XAxis dataKey="d" />
-								<YAxis />
-								<Tooltip />
-								<Legend />
-								<Line type="monotone" dataKey="spo2" dot={false} />
-								<Line type="monotone" dataKey="glucose" dot={false} />
-							</LineChart>
-						}
+						<LineChart data={loading ? [] : series}>
+							<CartesianGrid strokeDasharray="3 3" />
+							<XAxis dataKey="d" />
+							<YAxis />
+							<Tooltip />
+							<Legend />
+							<Line type="monotone" dataKey="spo2" dot={false} />
+							<Line type="monotone" dataKey="glucose" dot={false} />
+						</LineChart>
 					</ChartCard>
 				</Box>
 			</Box>

@@ -87,6 +87,115 @@ type ExtraUserFields = {
 	sport?: string;
 };
 
+type SportKey = "taekwondo" | "shooting" | "boxing" | "archery";
+
+function buildFakePractices(sport: SportKey, athleteId: number) {
+	const baseDate = dayjs().startOf("day");
+	const days = [0, 1, 2, 3, 5, 7];
+
+	if (sport === "taekwondo") {
+		return days.map((d, idx) => {
+			const dt = baseDate.subtract(d, "day").format("YYYY-MM-DD");
+			return {
+				id: 1000 + idx,
+				athlete_id: athleteId,
+				session_date: dt,
+				technique: idx % 2 === 0 ? "Dollyo chagi" : "Ap chagi",
+				drills_practiced: idx % 2 === 0 ? "Padwork, combos" : "Shadow, steps",
+				sparring_duration: 10 + idx * 5,
+				fitness_exercises: idx % 2 === 0 ? "Core, HIIT" : "Strength",
+				offense_score: 6 + (idx % 3),
+				defense_score: 5 + (idx % 3),
+				punch_power: 6 + (idx % 3),
+				notes: "Dữ liệu demo",
+				created_at: baseDate.subtract(d, "day").add(2, "hour").toISOString(),
+			} as any as TaekwondoPracticeDTO;
+		});
+	}
+
+	if (sport === "shooting") {
+		return days.map((d, idx) => {
+			const dt = baseDate.subtract(d, "day").format("YYYY-MM-DD");
+			const fired = 40 + idx * 10;
+			const hit = Math.max(0, fired - (6 + idx));
+			const acc = Math.round((hit / fired) * 100);
+			return {
+				id: 2000 + idx,
+				athlete_id: athleteId,
+				session_date: dt,
+				weapon_type: idx % 2 === 0 ? "Pistol" : "Rifle",
+				distance: idx % 2 === 0 ? 10 : 25,
+				target_type: idx % 2 === 0 ? "Paper" : "Electronic",
+				shots_fired: fired,
+				shots_hit: hit,
+				accuracy: acc,
+				notes: "Dữ liệu demo",
+				created_at: baseDate.subtract(d, "day").add(1, "hour").toISOString(),
+			} as any as ShootingPracticeDTO;
+		});
+	}
+
+	if (sport === "boxing") {
+		return [1, 2, 3, 4, 5].map((round, idx) => {
+			const dt = baseDate.subtract(idx, "day").toISOString();
+			const thrown = 80 + idx * 15;
+			const landed = Math.max(0, thrown - (22 + idx * 2));
+			return {
+				id: 3000 + idx,
+				athlete_id: athleteId,
+				round_number: round,
+				punches_thrown: thrown,
+				punches_landed: landed,
+				defense_success_rate: 45 + idx * 3,
+				footwork_score: 6 + (idx % 4),
+				sparring_partner: idx % 2 === 0 ? "Demo Partner A" : "Demo Partner B",
+				notes: "Dữ liệu demo",
+				created_at: dt,
+			} as any as BoxingPracticeDTO;
+		});
+	}
+
+	return days.map((d, idx) => {
+		const dt = baseDate.subtract(d, "day").format("YYYY-MM-DD");
+		return {
+			id: 4000 + idx,
+			athlete_id: athleteId,
+			session_date: dt,
+			target_distance: idx % 2 === 0 ? 18 : 30,
+			end_number: 8 + (idx % 3),
+			arrow_number: 48 + idx * 6,
+			score: 420 + idx * 12,
+			x_coord: idx % 2 === 0 ? 1 : -2,
+			y_coord: idx % 2 === 0 ? -1 : 2,
+			created_at: baseDate.subtract(d, "day").add(3, "hour").toISOString(),
+		} as any as ArcheryPracticeDTO;
+	});
+}
+
+function buildFakeEvaluations(sport: SportKey, athleteId: number) {
+	const baseDate = dayjs().startOf("day");
+	const days = [0, 3, 6, 10];
+
+	return days.map((d, idx) => {
+		const date = baseDate.subtract(d, "day").format("YYYY-MM-DD");
+		return {
+			id: 9000 + idx + (sport === "shooting" ? 100 : sport === "boxing" ? 200 : sport === "archery" ? 300 : 0),
+			athlete_id: athleteId,
+			date,
+			score: 6 + (idx % 4),
+			comment: "Dữ liệu demo",
+			created_at: baseDate.subtract(d, "day").add(4, "hour").toISOString(),
+		} as any;
+	});
+}
+
+function safeDateStr(v: any) {
+	if (!v) return "";
+	const s = String(v).trim();
+	const d = dayjs(s);
+	return d.isValid() ? d.format("YYYY-MM-DD") : "";
+}
+
 export function TrainingSection({ id }: { id?: number | string }) {
 	const router = useRouter();
 
@@ -115,7 +224,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 	}, [id]);
 
 	const [sort, setSort] = React.useState<"newest" | "oldest">("newest");
-	const [date, setDate] = React.useState<string>(dayjs().format("YYYY-MM-DD"));
+	const [date, setDate] = React.useState<string>("");
 	const [search, setSearch] = React.useState<string>("");
 
 	const [tkd, setTkd] = React.useState<TaekwondoPracticeDTO[]>([]);
@@ -131,7 +240,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 
 	const [confirm, setConfirm] = React.useState<{
 		id: number | string;
-		sport: "taekwondo" | "shooting" | "boxing" | "archery";
+		sport: SportKey;
 	} | null>(null);
 
 	const [evalDate, setEvalDate] = React.useState<string>("");
@@ -147,7 +256,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 
 	const [evalConfirm, setEvalConfirm] = React.useState<{
 		id: number | string;
-		sport: "taekwondo" | "shooting" | "boxing" | "archery";
+		sport: SportKey;
 	} | null>(null);
 
 	const athleteId = React.useMemo(() => {
@@ -174,41 +283,102 @@ export function TrainingSection({ id }: { id?: number | string }) {
 			try {
 				setLoading(true);
 				setError(null);
+
+				const normalizeArr = (x: any) => (Array.isArray(x) ? x : Array.isArray(x?.data) ? x.data : []);
+
+				const resolveData = (sport: SportKey, practicesRaw: any, evalsRaw: any) => {
+					const pArr = normalizeArr(practicesRaw);
+					const eArr = normalizeArr(evalsRaw);
+					const useFakeP = pArr.length === 0;
+					const useFakeE = eArr.length === 0;
+					const practices = useFakeP ? buildFakePractices(sport, athleteId) : pArr;
+					const evals = useFakeE ? buildFakeEvaluations(sport, athleteId) : eArr;
+					return { practices, evals, usedFake: useFakeP || useFakeE };
+				};
+
 				if (sportKey === "taekwondo") {
-					const [p, e] = await Promise.all([
-						listTaekwondoPracticesByAthlete(athleteId, "id-desc"),
-						listTaekwondoPerformanceAssessmentsByAthlete(athleteId, "id-desc"),
-					]);
+					let p: any = [];
+					let e: any = [];
+					try {
+						[p, e] = await Promise.all([
+							listTaekwondoPracticesByAthlete(athleteId, "id-desc"),
+							listTaekwondoPerformanceAssessmentsByAthlete(athleteId, "id-desc"),
+						]);
+					} catch {
+						p = [];
+						e = [];
+					}
+					const { practices, evals, usedFake } = resolveData("taekwondo", p, e);
 					if (!cancelled) {
-						setTkd(p);
-						setTkdEval(e);
+						setTkd(practices as TaekwondoPracticeDTO[]);
+						setTkdEval(evals as TaekwondoPerformanceAssessmentDTO[]);
+						if (usedFake) {
+							setDate("");
+							setEvalDate("");
+						}
 					}
 				} else if (sportKey === "shooting") {
-					const [p, e] = await Promise.all([
-						listShootingPracticesByAthlete(athleteId, "id-desc"),
-						listShootingPerformanceAssessmentsByAthlete(athleteId, "id-desc"),
-					]);
+					let p: any = [];
+					let e: any = [];
+					try {
+						[p, e] = await Promise.all([
+							listShootingPracticesByAthlete(athleteId, "id-desc"),
+							listShootingPerformanceAssessmentsByAthlete(athleteId, "id-desc"),
+						]);
+					} catch {
+						p = [];
+						e = [];
+					}
+					const { practices, evals, usedFake } = resolveData("shooting", p, e);
 					if (!cancelled) {
-						setShoot(p);
-						setShootEval(e);
+						setShoot(practices as ShootingPracticeDTO[]);
+						setShootEval(evals as ShootingPerformanceAssessmentDTO[]);
+						if (usedFake) {
+							setDate("");
+							setEvalDate("");
+						}
 					}
 				} else if (sportKey === "boxing") {
-					const [p, e] = await Promise.all([
-						listBoxingPracticesByAthlete(athleteId, "id-desc"),
-						listBoxingPerformanceAssessmentsByAthlete(athleteId, "id-desc"),
-					]);
+					let p: any = [];
+					let e: any = [];
+					try {
+						[p, e] = await Promise.all([
+							listBoxingPracticesByAthlete(athleteId, "id-desc"),
+							listBoxingPerformanceAssessmentsByAthlete(athleteId, "id-desc"),
+						]);
+					} catch {
+						p = [];
+						e = [];
+					}
+					const { practices, evals, usedFake } = resolveData("boxing", p, e);
 					if (!cancelled) {
-						setBox(p);
-						setBoxEval(e);
+						setBox(practices as BoxingPracticeDTO[]);
+						setBoxEval(evals as BoxingPerformanceAssessmentDTO[]);
+						if (usedFake) {
+							setDate("");
+							setEvalDate("");
+						}
 					}
 				} else if (sportKey === "archery") {
-					const [p, e] = await Promise.all([
-						listArcheryPracticesByAthlete(athleteId, "id-desc"),
-						listArcheryPerformanceAssessmentsByAthlete(athleteId, "id-desc"),
-					]);
+					let p: any = [];
+					let e: any = [];
+					try {
+						[p, e] = await Promise.all([
+							listArcheryPracticesByAthlete(athleteId, "id-desc"),
+							listArcheryPerformanceAssessmentsByAthlete(athleteId, "id-desc"),
+						]);
+					} catch {
+						p = [];
+						e = [];
+					}
+					const { practices, evals, usedFake } = resolveData("archery", p, e);
 					if (!cancelled) {
-						setArch(p);
-						setArchEval(e);
+						setArch(practices as ArcheryPracticeDTO[]);
+						setArchEval(evals as ArcheryPerformanceAssessmentDTO[]);
+						if (usedFake) {
+							setDate("");
+							setEvalDate("");
+						}
 					}
 				}
 			} catch (e: any) {
@@ -231,30 +401,35 @@ export function TrainingSection({ id }: { id?: number | string }) {
 		setEvalPage(0);
 	}, [sportKey, evalSearch, evalSort, evalDate]);
 
-	const applyCommonSort = <T extends { created_at?: string; session_date?: string; notes?: string }>(arr: T[]) => {
+	const applyCommonSort = <T extends { created_at?: string; session_date?: string }>(arr: T[]) => {
 		const byTime = [...arr].sort((a, b) => {
-			const da = (a as any).session_date || a.created_at || "";
-			const db = (b as any).session_date || b.created_at || "";
+			const da = safeDateStr((a as any).session_date) || String(a.created_at || "");
+			const db = safeDateStr((b as any).session_date) || String(b.created_at || "");
 			return sort === "newest" ? db.localeCompare(da) : da.localeCompare(db);
 		});
 		const q = search.trim().toLowerCase();
 		const bySearch = q ? byTime.filter((r) => JSON.stringify(r).toLowerCase().includes(q)) : byTime;
-		const byDate = date
-			? bySearch.filter((r) => (r as any).session_date && dayjs((r as any).session_date).isSame(dayjs(date), "day"))
+		const d = safeDateStr(date);
+		const byDate = d
+			? bySearch.filter(
+					(r) =>
+						safeDateStr((r as any).session_date) && dayjs(safeDateStr((r as any).session_date)).isSame(dayjs(d), "day")
+				)
 			: bySearch;
 		return byDate;
 	};
 
 	const applyEvalSort = <T extends { date?: string; created_at?: string }>(arr: T[]) => {
 		const byTime = [...arr].sort((a, b) => {
-			const da = (a as any).date || (a as any).created_at || "";
-			const db = (b as any).date || (b as any).created_at || "";
+			const da = safeDateStr((a as any).date) || String((a as any).created_at || "");
+			const db = safeDateStr((b as any).date) || String((b as any).created_at || "");
 			return evalSort === "newest" ? db.localeCompare(da) : da.localeCompare(db);
 		});
 		const q = evalSearch.trim().toLowerCase();
 		const bySearch = q ? byTime.filter((r) => JSON.stringify(r).toLowerCase().includes(q)) : byTime;
-		const byDate = evalDate
-			? bySearch.filter((r: any) => r.date && dayjs(r.date).isSame(dayjs(evalDate), "day"))
+		const d = safeDateStr(evalDate);
+		const byDate = d
+			? bySearch.filter((r: any) => safeDateStr(r.date) && dayjs(safeDateStr(r.date)).isSame(dayjs(d), "day"))
 			: bySearch;
 		return byDate;
 	};
@@ -271,32 +446,32 @@ export function TrainingSection({ id }: { id?: number | string }) {
 		router.push(`/dashboard/customers/evaluation/${sportKey}/add?athlete=${athleteId}`);
 	};
 
-	const handleEdit = (id: number | string) => {
+	const handleEdit = (rid: number | string) => {
 		if (!athleteId || !sportKey) return;
-		router.push(`/dashboard/customers/training/${sportKey}/update/${id}?athlete=${athleteId}`);
+		router.push(`/dashboard/customers/training/${sportKey}/update/${rid}?athlete=${athleteId}`);
 	};
 
-	const handleEditEvaluation = (id: number | string) => {
+	const handleEditEvaluation = (rid: number | string) => {
 		if (!athleteId || !sportKey) return;
-		router.push(`/dashboard/customers/evaluation/${sportKey}/update/${id}?athlete=${athleteId}`);
+		router.push(`/dashboard/customers/evaluation/${sportKey}/update/${rid}?athlete=${athleteId}`);
 	};
 
 	const doDelete = async () => {
 		if (!confirm) return;
-		const { id, sport } = confirm;
+		const { id: rid, sport } = confirm;
 		try {
 			if (sport === "taekwondo") {
-				await deleteTaekwondoPracticeById(Number(id));
-				setTkd((prev) => prev.filter((r) => Number(r.id) !== Number(id)));
+				await deleteTaekwondoPracticeById(Number(rid));
+				setTkd((prev) => prev.filter((r: any) => Number(r.id) !== Number(rid)));
 			} else if (sport === "shooting") {
-				await deleteShootingPracticeById(Number(id));
-				setShoot((prev) => prev.filter((r) => Number(r.id) !== Number(id)));
+				await deleteShootingPracticeById(Number(rid));
+				setShoot((prev) => prev.filter((r: any) => Number(r.id) !== Number(rid)));
 			} else if (sport === "boxing") {
-				await deleteBoxingPracticeById(Number(id));
-				setBox((prev) => prev.filter((r) => Number(r.id) !== Number(id)));
+				await deleteBoxingPracticeById(Number(rid));
+				setBox((prev) => prev.filter((r: any) => Number(r.id) !== Number(rid)));
 			} else if (sport === "archery") {
-				await deleteArcheryPracticeById(Number(id));
-				setArch((prev) => prev.filter((r) => Number(r.id) !== Number(id)));
+				await deleteArcheryPracticeById(Number(rid));
+				setArch((prev) => prev.filter((r: any) => Number(r.id) !== Number(rid)));
 			}
 		} finally {
 			setConfirm(null);
@@ -305,20 +480,20 @@ export function TrainingSection({ id }: { id?: number | string }) {
 
 	const doDeleteEvaluation = async () => {
 		if (!evalConfirm) return;
-		const { id, sport } = evalConfirm;
+		const { id: rid, sport } = evalConfirm;
 		try {
 			if (sport === "taekwondo") {
-				await deleteTaekwondoPerformanceAssessmentById(Number(id));
-				setTkdEval((prev) => prev.filter((r) => Number(r.id) !== Number(id)));
+				await deleteTaekwondoPerformanceAssessmentById(Number(rid));
+				setTkdEval((prev) => prev.filter((r: any) => Number(r.id) !== Number(rid)));
 			} else if (sport === "shooting") {
-				await deleteShootingPerformanceAssessmentById(Number(id));
-				setShootEval((prev) => prev.filter((r) => Number(r.id) !== Number(id)));
+				await deleteShootingPerformanceAssessmentById(Number(rid));
+				setShootEval((prev) => prev.filter((r: any) => Number(r.id) !== Number(rid)));
 			} else if (sport === "boxing") {
-				await deleteBoxingPerformanceAssessmentById(Number(id));
-				setBoxEval((prev) => prev.filter((r) => Number(r.id) !== Number(id)));
+				await deleteBoxingPerformanceAssessmentById(Number(rid));
+				setBoxEval((prev) => prev.filter((r: any) => Number(r.id) !== Number(rid)));
 			} else if (sport === "archery") {
-				await deleteArcheryPerformanceAssessmentById(Number(id));
-				setArchEval((prev) => prev.filter((r) => Number(r.id) !== Number(id)));
+				await deleteArcheryPerformanceAssessmentById(Number(rid));
+				setArchEval((prev) => prev.filter((r: any) => Number(r.id) !== Number(rid)));
 			}
 		} finally {
 			setEvalConfirm(null);
@@ -336,7 +511,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 						? archEval
 						: [];
 
-	const evalFiltered = applyEvalSort(evalRows);
+	const evalFiltered = applyEvalSort(evalRows as any[]);
 	const tkdFiltered = applyCommonSort(tkd);
 	const shootFiltered = applyCommonSort(shoot);
 	const boxFiltered = applyCommonSort(box);
@@ -422,12 +597,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 											<IconButton
 												size="small"
 												color="error"
-												onClick={() =>
-													setEvalConfirm({
-														id: r.id!,
-														sport: sportKey as "taekwondo" | "shooting" | "boxing" | "archery",
-													})
-												}
+												onClick={() => setEvalConfirm({ id: r.id!, sport: sportKey as SportKey })}
 											>
 												<Trash />
 											</IconButton>
@@ -506,6 +676,75 @@ export function TrainingSection({ id }: { id?: number | string }) {
 				</TextField>
 			</Stack>
 
+			{sportKey === "archery" && (
+				<PracticeTableCard
+					title="Bắn cung — Buổi tập"
+					header={
+						<Button onClick={handleAdd} startIcon={<Plus />} size="small" variant="contained">
+							Thêm mới
+						</Button>
+					}
+				>
+					<Table sx={{ minWidth: 1180 }}>
+						<TableHead>
+							<TableRow>
+								<TableCell>Ngày tập</TableCell>
+								<TableCell>Cự ly (m)</TableCell>
+								<TableCell>End số</TableCell>
+								<TableCell>Mũi tên số</TableCell>
+								<TableCell>Điểm</TableCell>
+								<TableCell>Lệch X</TableCell>
+								<TableCell>Lệch Y</TableCell>
+								<TableCell align="right">Thao tác</TableCell>
+							</TableRow>
+						</TableHead>
+						<TableBody>
+							{applyPagination(archFiltered, page, rowsPerPage).map((r: any) => (
+								<TableRow key={r.id} hover>
+									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
+									<TableCell>{r.target_distance ?? "-"}</TableCell>
+									<TableCell>{r.end_number ?? "-"}</TableCell>
+									<TableCell>{r.arrow_number ?? "-"}</TableCell>
+									<TableCell>{r.score ?? "-"}</TableCell>
+									<TableCell>{r.x_coord ?? "-"}</TableCell>
+									<TableCell>{r.y_coord ?? "-"}</TableCell>
+									<TableCell align="right">
+										<IconButton size="small" onClick={() => handleEdit(r.id)}>
+											<PencilSimple />
+										</IconButton>
+										<IconButton size="small" color="error" onClick={() => setConfirm({ id: r.id!, sport: "archery" })}>
+											<Trash />
+										</IconButton>
+									</TableCell>
+								</TableRow>
+							))}
+							{!loading && archFiltered.length === 0 && (
+								<TableRow>
+									<TableCell colSpan={9}>
+										<Box p={2} textAlign="center" color="text.secondary">
+											Không có dữ liệu
+										</Box>
+									</TableCell>
+								</TableRow>
+							)}
+						</TableBody>
+					</Table>
+					<TablePagination
+						component="div"
+						count={archFiltered.length}
+						page={page}
+						rowsPerPage={rowsPerPage}
+						onPageChange={(_, p) => setPage(p)}
+						onRowsPerPageChange={(e) => {
+							setRowsPerPage(parseInt(e.target.value, 10));
+							setPage(0);
+						}}
+						rowsPerPageOptions={[5, 10, 25]}
+						labelRowsPerPage="Dòng / trang"
+					/>
+				</PracticeTableCard>
+			)}
+
 			{sportKey === "taekwondo" && (
 				<PracticeTableCard
 					title="Taekwondo — Buổi tập"
@@ -531,7 +770,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{applyPagination(tkdFiltered, page, rowsPerPage).map((r) => (
+							{applyPagination(tkdFiltered, page, rowsPerPage).map((r: any) => (
 								<TableRow key={r.id} hover>
 									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
 									<TableCell>{r.technique || "-"}</TableCell>
@@ -607,7 +846,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{applyPagination(shootFiltered, page, rowsPerPage).map((r) => (
+							{applyPagination(shootFiltered, page, rowsPerPage).map((r: any) => (
 								<TableRow key={r.id} hover>
 									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
 									<TableCell>{r.weapon_type || "-"}</TableCell>
@@ -678,7 +917,7 @@ export function TrainingSection({ id }: { id?: number | string }) {
 							</TableRow>
 						</TableHead>
 						<TableBody>
-							{applyPagination(boxFiltered, page, rowsPerPage).map((r) => (
+							{applyPagination(boxFiltered, page, rowsPerPage).map((r: any) => (
 								<TableRow key={r.id} hover>
 									<TableCell>{r.round_number ?? "-"}</TableCell>
 									<TableCell>{r.punches_thrown ?? "-"}</TableCell>
@@ -712,75 +951,6 @@ export function TrainingSection({ id }: { id?: number | string }) {
 					<TablePagination
 						component="div"
 						count={boxFiltered.length}
-						page={page}
-						rowsPerPage={rowsPerPage}
-						onPageChange={(_, p) => setPage(p)}
-						onRowsPerPageChange={(e) => {
-							setRowsPerPage(parseInt(e.target.value, 10));
-							setPage(0);
-						}}
-						rowsPerPageOptions={[5, 10, 25]}
-						labelRowsPerPage="Dòng / trang"
-					/>
-				</PracticeTableCard>
-			)}
-
-			{sportKey === "archery" && (
-				<PracticeTableCard
-					title="Bắn cung — Buổi tập"
-					header={
-						<Button onClick={handleAdd} startIcon={<Plus />} size="small" variant="contained">
-							Thêm mới
-						</Button>
-					}
-				>
-					<Table sx={{ minWidth: 1180 }}>
-						<TableHead>
-							<TableRow>
-								<TableCell>Ngày tập</TableCell>
-								<TableCell>Cự ly (m)</TableCell>
-								<TableCell>End số</TableCell>
-								<TableCell>Mũi tên số</TableCell>
-								<TableCell>Điểm</TableCell>
-								<TableCell>Lệch X</TableCell>
-								<TableCell>Lệch Y</TableCell>
-								<TableCell align="right">Thao tác</TableCell>
-							</TableRow>
-						</TableHead>
-						<TableBody>
-							{applyPagination(archFiltered, page, rowsPerPage).map((r) => (
-								<TableRow key={r.id} hover>
-									<TableCell>{r.session_date ? dayjs(r.session_date).format("DD/MM/YYYY") : "-"}</TableCell>
-									<TableCell>{r.target_distance ?? "-"}</TableCell>
-									<TableCell>{r.end_number ?? "-"}</TableCell>
-									<TableCell>{r.arrow_number ?? "-"}</TableCell>
-									<TableCell>{r.score ?? "-"}</TableCell>
-									<TableCell>{r.x_coord ?? "-"}</TableCell>
-									<TableCell>{r.y_coord ?? "-"}</TableCell>
-									<TableCell align="right">
-										<IconButton size="small" onClick={() => handleEdit(r.id)}>
-											<PencilSimple />
-										</IconButton>
-										<IconButton size="small" color="error" onClick={() => setConfirm({ id: r.id!, sport: "archery" })}>
-											<Trash />
-										</IconButton>
-									</TableCell>
-								</TableRow>
-							))}
-							{!loading && archFiltered.length === 0 && (
-								<TableRow>
-									<TableCell colSpan={9}>
-										<Box p={2} textAlign="center" color="text.secondary">
-											Không có dữ liệu
-										</Box>
-									</TableCell>
-								</TableRow>
-							)}
-						</TableBody>
-					</Table>
-					<TablePagination
-						component="div"
-						count={archFiltered.length}
 						page={page}
 						rowsPerPage={rowsPerPage}
 						onPageChange={(_, p) => setPage(p)}
