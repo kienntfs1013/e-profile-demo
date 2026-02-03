@@ -11,6 +11,7 @@ import {
 	Spo2Row,
 	StepsRow,
 } from "@/services/gocare.service";
+import { getLoggedInUserId, getUserById } from "@/services/user.service";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -189,6 +190,63 @@ function buildFakeSleepPie(series: DayPoint[]) {
 	];
 }
 
+function buildMetricsFromLast(last: Partial<DayPoint>): Metric[] {
+	return [
+		{
+			key: "spo2",
+			label: "Oxy trong máu",
+			value: last.spo2 != null ? String(last.spo2) : "—",
+			unit: "%",
+			icon: Drop,
+			color: "#22c55e",
+			group: "vitals",
+		},
+		{
+			key: "bpm",
+			label: "Nhịp tim",
+			value: last.bpm != null ? String(last.bpm) : "—",
+			unit: "BPM",
+			icon: Heartbeat,
+			color: "#ef4444",
+			group: "vitals",
+		},
+		{
+			key: "sleep",
+			label: "Giấc ngủ",
+			value: last.sleepH != null ? String(last.sleepH) : "—",
+			unit: "h",
+			icon: Moon,
+			color: "#8b5cf6",
+			group: "activity",
+		},
+		{
+			key: "steps",
+			label: "Bước đi",
+			value: last.steps != null ? String(last.steps) : "—",
+			icon: Footprints,
+			color: "#6366f1",
+			group: "activity",
+		},
+		{
+			key: "weight",
+			label: "Cân nặng",
+			value: "154.3",
+			unit: "lb",
+			icon: Scales,
+			color: "#0ea5e9",
+			group: "vitals",
+		},
+	];
+}
+
+async function resolveLoggedInPhone(): Promise<string> {
+	const uid = getLoggedInUserId();
+	if (!uid) return "";
+	const u: any = await getUserById(uid);
+	const phone = String(u?.phoneNumber || u?.phone || "").trim();
+	return phone;
+}
+
 export default function Page(): React.JSX.Element {
 	const [startDate, setStartDate] = React.useState<string>(() => {
 		const t = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
@@ -216,75 +274,26 @@ export default function Page(): React.JSX.Element {
 			const startTime = new Date(startDate + "T00:00:00").getTime();
 			const endTime = new Date(endDate + "T23:59:59").getTime();
 
-			const envPhone = process.env.NEXT_PUBLIC_GOCARE_DEFAULT_PHONE || "0987999975";
+			const rawPhone = await resolveLoggedInPhone();
+
 			const envPrefix = process.env.NEXT_PUBLIC_GOCARE_PHONE_PREFIX || "84";
-			const number = normPhoneToNumber(envPhone);
+			const prefix = String(envPrefix || "84").replace(/\D+/g, "") || "84";
+			const number = rawPhone ? normPhoneToNumber(rawPhone) : "";
 
 			let resolvedUserId: number | undefined = undefined;
 
 			if (number) {
-				const profile = await getUserProfileByPhone(envPrefix, number);
+				const profile = await getUserProfileByPhone(prefix, number);
 				const got = Number((profile as any)?.userId ?? (profile as any)?.id);
 				if (Number.isFinite(got)) resolvedUserId = got;
 			}
 
 			if (!resolvedUserId) {
-				const fallback = Number(process.env.NEXT_PUBLIC_GOCARE_DEFAULT_USER_ID || "");
-				resolvedUserId = Number.isFinite(fallback) ? fallback : undefined;
-			}
-
-			if (!resolvedUserId) {
 				const fakeSeries = buildFakeSeries(startDate, endDate);
 				const last = fakeSeries[fakeSeries.length - 1] || {};
-				const m: Metric[] = [
-					{
-						key: "spo2",
-						label: "Oxy trong máu",
-						value: last.spo2 != null ? String(last.spo2) : "—",
-						unit: "%",
-						icon: Drop,
-						color: "#22c55e",
-						group: "vitals",
-					},
-					{
-						key: "bpm",
-						label: "Nhịp tim",
-						value: last.bpm != null ? String(last.bpm) : "—",
-						unit: "BPM",
-						icon: Heartbeat,
-						color: "#ef4444",
-						group: "vitals",
-					},
-					{
-						key: "sleep",
-						label: "Giấc ngủ",
-						value: last.sleepH != null ? String(last.sleepH) : "—",
-						unit: "h",
-						icon: Moon,
-						color: "#8b5cf6",
-						group: "activity",
-					},
-					{
-						key: "steps",
-						label: "Bước đi",
-						value: last.steps != null ? String(last.steps) : "—",
-						icon: Footprints,
-						color: "#6366f1",
-						group: "activity",
-					},
-					{
-						key: "weight",
-						label: "Cân nặng",
-						value: "154.3",
-						unit: "lb",
-						icon: Scales,
-						color: "#0ea5e9",
-						group: "vitals",
-					},
-				];
 				setSeries(fakeSeries);
 				setSleepPie(buildFakeSleepPie(fakeSeries));
-				setMetrics(m);
+				setMetrics(buildMetricsFromLast(last));
 				return;
 			}
 
@@ -338,12 +347,14 @@ export default function Page(): React.JSX.Element {
 				const v = map.get(k)!;
 				const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : undefined);
 				const sl = v.slHours.length ? v.slHours.reduce((a, b) => a + b, 0) : undefined;
+				const hrAvg = avg(v.hr);
+				const spAvg = avg(v.sp);
 				return {
 					d: fmtDay(k),
-					bpm: avg(v.hr) ? Math.round(avg(v.hr)!) : undefined,
+					bpm: hrAvg != null ? Math.round(hrAvg) : undefined,
 					steps: v.st ? Math.round(v.st) : undefined,
-					spo2: avg(v.sp) ? Math.round(avg(v.sp)!) : undefined,
-					sleepH: sl ? +sl.toFixed(1) : undefined,
+					spo2: spAvg != null ? Math.round(spAvg) : undefined,
+					sleepH: sl != null ? +sl.toFixed(1) : undefined,
 				};
 			});
 
@@ -352,108 +363,15 @@ export default function Page(): React.JSX.Element {
 			const finalRows = hasAny ? rows : buildFakeSeries(startDate, endDate);
 			const last = finalRows[finalRows.length - 1] || {};
 
-			const m: Metric[] = [
-				{
-					key: "spo2",
-					label: "Oxy trong máu",
-					value: last.spo2 != null ? String(last.spo2) : "—",
-					unit: "%",
-					icon: Drop,
-					color: "#22c55e",
-					group: "vitals",
-				},
-				{
-					key: "bpm",
-					label: "Nhịp tim",
-					value: last.bpm != null ? String(last.bpm) : "—",
-					unit: "BPM",
-					icon: Heartbeat,
-					color: "#ef4444",
-					group: "vitals",
-				},
-				{
-					key: "sleep",
-					label: "Giấc ngủ",
-					value: last.sleepH != null ? String(last.sleepH) : "—",
-					unit: "h",
-					icon: Moon,
-					color: "#8b5cf6",
-					group: "activity",
-				},
-				{
-					key: "steps",
-					label: "Bước đi",
-					value: last.steps != null ? String(last.steps) : "—",
-					icon: Footprints,
-					color: "#6366f1",
-					group: "activity",
-				},
-				{
-					key: "weight",
-					label: "Cân nặng",
-					value: "154.3",
-					unit: "lb",
-					icon: Scales,
-					color: "#0ea5e9",
-					group: "vitals",
-				},
-			];
-
 			setSeries(finalRows);
 			setSleepPie(buildFakeSleepPie(finalRows));
-			setMetrics(m);
+			setMetrics(buildMetricsFromLast(last));
 		} catch {
 			const fakeSeries = buildFakeSeries(startDate, endDate);
 			const last = fakeSeries[fakeSeries.length - 1] || {};
-			const m: Metric[] = [
-				{
-					key: "spo2",
-					label: "Oxy trong máu",
-					value: last.spo2 != null ? String(last.spo2) : "—",
-					unit: "%",
-					icon: Drop,
-					color: "#22c55e",
-					group: "vitals",
-				},
-				{
-					key: "bpm",
-					label: "Nhịp tim",
-					value: last.bpm != null ? String(last.bpm) : "—",
-					unit: "BPM",
-					icon: Heartbeat,
-					color: "#ef4444",
-					group: "vitals",
-				},
-				{
-					key: "sleep",
-					label: "Giấc ngủ",
-					value: last.sleepH != null ? String(last.sleepH) : "—",
-					unit: "h",
-					icon: Moon,
-					color: "#8b5cf6",
-					group: "activity",
-				},
-				{
-					key: "steps",
-					label: "Bước đi",
-					value: last.steps != null ? String(last.steps) : "—",
-					icon: Footprints,
-					color: "#6366f1",
-					group: "activity",
-				},
-				{
-					key: "weight",
-					label: "Cân nặng",
-					value: "154.3",
-					unit: "lb",
-					icon: Scales,
-					color: "#0ea5e9",
-					group: "vitals",
-				},
-			];
 			setSeries(fakeSeries);
 			setSleepPie(buildFakeSleepPie(fakeSeries));
-			setMetrics(m);
+			setMetrics(buildMetricsFromLast(last));
 		} finally {
 			console.timeEnd("[HealthPage] fetchData");
 			console.groupEnd();

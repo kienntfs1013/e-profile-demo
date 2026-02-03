@@ -23,7 +23,6 @@ export type Spo2Row = { oxygenValue?: number; timestamp?: number; [k: string]: a
 export type SleepRow = { sleepTime?: number; wakeupTime?: number; sleLine?: string; [k: string]: any };
 export type StepsRow = { stepValue?: number; sportValue?: number; timestamp?: number; [k: string]: any };
 
-// ✅ luôn mặc định dùng proxy /gocare
 let BASE = "/gocare";
 let TENANT = "epr";
 let PID = "2s7xdewkr416ok5";

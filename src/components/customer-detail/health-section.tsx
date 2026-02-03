@@ -243,8 +243,34 @@ function fmtDay(ms: number) {
 function normalizePhone(p?: string | null) {
 	const digits = String(p || "").replace(/\D+/g, "");
 	if (digits.startsWith("0")) return digits.slice(1);
-	if (digits.startsWith("84") && digits.length === 11) return digits.slice(2);
+	if (digits.startsWith("84") && digits.length >= 10) return digits.slice(2);
 	return digits;
+}
+
+function toE164(phoneDigits: string, prefix = "84") {
+	const p = String(prefix || "84").replace(/\D+/g, "") || "84";
+	const d = normalizePhone(phoneDigits);
+	if (!d) return "";
+	return d.startsWith(p) ? d : `${p}${d}`;
+}
+
+function extractPhoneFromUser(u: (UserDTO & Extra) | null | undefined): string {
+	const raw =
+		(String((u as any)?.phoneNumber || "").trim() ||
+			String((u as any)?.phone || "").trim() ||
+			String((u as any)?.mobile || "").trim()) ??
+		"";
+	return normalizePhone(raw);
+}
+
+async function resolvePhoneFromUserDetail(targetUserId?: number): Promise<string> {
+	if (!targetUserId) return "";
+	const detail = await getUserById(targetUserId).catch(() => null);
+	const phone = extractPhoneFromUser((detail as any) ?? null);
+	if (phone) return phone;
+
+	const fromList = await fetchUserByIdFromList(targetUserId).catch(() => null);
+	return extractPhoneFromUser((fromList as any) ?? null);
 }
 
 function buildFakeSeries(days: number, startMs: number): DayPoint[] {
@@ -384,14 +410,15 @@ export function HealthSection({ id }: { id?: number | string }) {
 	}, [id]);
 
 	const fetchData = React.useCallback(async () => {
-		const phone =
-			normalizePhone(user?.phoneNumber) ||
-			normalizePhone((user as any)?.phone) ||
-			normalizePhone((user as any)?.mobile) ||
-			"";
+		const viewerId = getLoggedInUserId?.();
+		const targetUserId = id != null && !Number.isNaN(Number(id)) ? Number(id) : viewerId || undefined;
+
 		const end = new Date(date + "T23:59:59").getTime();
 		const days = range === "7d" ? 7 : 30;
 		const start = startOfDayMs(new Date(end - (days - 1) * 24 * 60 * 60 * 1000));
+
+		const phoneDigits = await resolvePhoneFromUserDetail(targetUserId);
+		const phone = phoneDigits ? toE164(phoneDigits, process.env.NEXT_PUBLIC_GOCARE_PHONE_PREFIX || "84") : "";
 
 		if (!phone) {
 			const fake = buildFakeSeries(days, start);
@@ -481,7 +508,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 		} finally {
 			setLoading(false);
 		}
-	}, [user, date, range]);
+	}, [id, date, range]);
 
 	React.useEffect(() => {
 		fetchData();
@@ -566,44 +593,38 @@ export function HealthSection({ id }: { id?: number | string }) {
 			>
 				<Box sx={{ minWidth: 0 }}>
 					<ChartCard title={`Bước đi theo ngày (${range === "7d" ? "7 ngày" : "30 ngày"})`}>
-						{
-							<BarChart data={loading ? [] : series}>
-								<CartesianGrid strokeDasharray="3 3" />
-								<XAxis dataKey="d" />
-								<YAxis />
-								<Tooltip />
-								<Bar dataKey="steps" fill="#6366f1" />
-							</BarChart>
-						}
+						<BarChart data={loading ? [] : series}>
+							<CartesianGrid strokeDasharray="3 3" />
+							<XAxis dataKey="d" />
+							<YAxis />
+							<Tooltip />
+							<Bar dataKey="steps" fill="#6366f1" />
+						</BarChart>
 					</ChartCard>
 				</Box>
 				<Box sx={{ minWidth: 0 }}>
 					<ChartCard title="Nhịp tim (BPM) theo ngày">
-						{
-							<LineChart data={loading ? [] : series}>
-								<CartesianGrid strokeDasharray="3 3" />
-								<XAxis dataKey="d" />
-								<YAxis />
-								<Tooltip />
-								<Legend />
-								<Line type="monotone" dataKey="bpm" dot={false} />
-							</LineChart>
-						}
+						<LineChart data={loading ? [] : series}>
+							<CartesianGrid strokeDasharray="3 3" />
+							<XAxis dataKey="d" />
+							<YAxis />
+							<Tooltip />
+							<Legend />
+							<Line type="monotone" dataKey="bpm" dot={false} />
+						</LineChart>
 					</ChartCard>
 				</Box>
 				<Box sx={{ minWidth: 0 }}>
 					<ChartCard title={`Cấu trúc giấc ngủ (${range === "7d" ? "7 ngày" : "30 ngày"})`}>
-						{
-							<PieChart>
-								<Tooltip />
-								<Legend />
-								<Pie data={sleepPie} dataKey="value" nameKey="name" outerRadius={110} label>
-									{sleepPie.map((_, i) => (
-										<Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-									))}
-								</Pie>
-							</PieChart>
-						}
+						<PieChart>
+							<Tooltip />
+							<Legend />
+							<Pie data={sleepPie} dataKey="value" nameKey="name" outerRadius={110} label>
+								{sleepPie.map((_, i) => (
+									<Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+								))}
+							</Pie>
+						</PieChart>
 					</ChartCard>
 				</Box>
 				<Box sx={{ minWidth: 0 }}>
