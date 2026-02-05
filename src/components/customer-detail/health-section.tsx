@@ -15,6 +15,7 @@ import { Drop } from "@phosphor-icons/react/dist/ssr/Drop";
 import { Footprints } from "@phosphor-icons/react/dist/ssr/Footprints";
 import { Heartbeat } from "@phosphor-icons/react/dist/ssr/Heartbeat";
 import { Moon } from "@phosphor-icons/react/dist/ssr/Moon";
+import { Scales } from "@phosphor-icons/react/dist/ssr/Scales";
 import {
 	Bar,
 	BarChart,
@@ -46,7 +47,15 @@ type Metric = {
 	group: Group;
 };
 
-type DayPoint = { d: string; bpm?: number; steps?: number; spo2?: number; sleepH?: number; glucose?: number };
+type DayPoint = {
+	d: string;
+	bpm?: number;
+	steps?: number;
+	spo2?: number;
+	sleepH?: number;
+	glucose?: number;
+	weightKg?: number;
+};
 
 type Extra = {
 	phoneNumber?: string;
@@ -139,6 +148,9 @@ function evaluateMetric(m: Metric): { key: StatusKey; label: string; color: "suc
 			if (n >= 5 && n <= 6.5) return { key: "good", label: "Tốt", color: "success" };
 			return { key: "normal", label: "Bình thường", color: "warning" };
 		}
+		case "weight": {
+			return { key: "normal", label: "Bình thường", color: "warning" };
+		}
 		default:
 			return { key: "normal", label: "Bình thường", color: "warning" };
 	}
@@ -157,10 +169,11 @@ function StatCard({ m }: { m: Metric }) {
 				display: "flex",
 				flexDirection: "column",
 				gap: 1,
+				minWidth: 0,
 			}}
 		>
 			<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
-				<Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+				<Typography variant="subtitle2" sx={{ fontWeight: 700, minWidth: 0 }}>
 					{m.label}
 				</Typography>
 				<Box
@@ -178,21 +191,22 @@ function StatCard({ m }: { m: Metric }) {
 					<Icon weight="fill" />
 				</Box>
 			</Box>
-			<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
-				<Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
-					<Typography variant="h5" sx={{ fontWeight: 800 }}>
-						{m.value}
+
+			<Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
+				<Typography variant="h5" sx={{ fontWeight: 800 }}>
+					{m.value}
+				</Typography>
+				{m.unit ? (
+					<Typography variant="body2" color="text.secondary">
+						{m.unit}
 					</Typography>
-					{m.unit ? (
-						<Typography variant="body2" color="text.secondary">
-							{m.unit}
-						</Typography>
-					) : null}
-				</Box>
-				<Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-					<Chip size="small" color={status.color} label={status.label} />
-				</Box>
+				) : null}
 			</Box>
+
+			<Box sx={{ display: "flex", justifyContent: "flex-start" }}>
+				<Chip size="small" color={status.color} label={status.label} />
+			</Box>
+
 			{m.helper ? (
 				<Typography variant="caption" color="text.secondary">
 					{m.helper}
@@ -268,7 +282,6 @@ async function resolvePhoneFromUserDetail(targetUserId?: number): Promise<string
 	const detail = await getUserById(targetUserId).catch(() => null);
 	const phone = extractPhoneFromUser((detail as any) ?? null);
 	if (phone) return phone;
-
 	const fromList = await fetchUserByIdFromList(targetUserId).catch(() => null);
 	return extractPhoneFromUser((fromList as any) ?? null);
 }
@@ -287,7 +300,8 @@ function buildFakeSeries(days: number, startMs: number): DayPoint[] {
 	return rows;
 }
 
-function buildFakeMetricsFromSeries(last: DayPoint): Metric[] {
+function buildMetricsFromSeries(last: DayPoint): Metric[] {
+	const weightKg = typeof last.weightKg === "number" ? last.weightKg : 69.99;
 	return [
 		{
 			key: "spo2",
@@ -324,6 +338,15 @@ function buildFakeMetricsFromSeries(last: DayPoint): Metric[] {
 			color: "#6366f1",
 			group: "activity",
 		},
+		{
+			key: "weight",
+			label: "Cân nặng",
+			value: weightKg.toFixed(2),
+			unit: "kg",
+			icon: Scales,
+			color: "#0ea5e9",
+			group: "vitals",
+		},
 	];
 }
 
@@ -345,24 +368,26 @@ function hasAnyRealData(rows: DayPoint[]) {
 
 function fillMissingWithFake(rows: DayPoint[], days: number, startMs: number): DayPoint[] {
 	const fake = buildFakeSeries(days, startMs);
-	const byD = new Map<string, DayPoint>();
-	fake.forEach((r) => byD.set(r.d, r));
+	const fakeByD = new Map<string, DayPoint>();
+	fake.forEach((r) => fakeByD.set(r.d, r));
+
+	const realByD = new Map<string, DayPoint>();
+	rows.forEach((r) => realByD.set(r.d, r));
+
 	const out: DayPoint[] = [];
 	for (let i = 0; i < days; i++) {
 		const d = fmtDay(startMs + i * 86400000);
-		const real = rows.find((x) => x.d === d);
-		if (!real) out.push(byD.get(d)!);
-		else {
-			const f = byD.get(d)!;
-			out.push({
-				d,
-				bpm: real.bpm ?? f.bpm,
-				steps: real.steps ?? f.steps,
-				spo2: real.spo2 ?? f.spo2,
-				sleepH: real.sleepH ?? f.sleepH,
-				glucose: real.glucose ?? f.glucose,
-			});
-		}
+		const real = realByD.get(d);
+		const f = fakeByD.get(d)!;
+		out.push({
+			d,
+			bpm: real?.bpm ?? f.bpm,
+			steps: real?.steps ?? f.steps,
+			spo2: real?.spo2 ?? f.spo2,
+			sleepH: real?.sleepH ?? f.sleepH,
+			glucose: real?.glucose ?? f.glucose,
+			weightKg: real?.weightKg ?? f.weightKg,
+		});
 	}
 	return out;
 }
@@ -424,7 +449,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 			const fake = buildFakeSeries(days, start);
 			setSeries(fake);
 			setSleepPie(buildSleepPieFromSeries(fake));
-			setMetrics(buildFakeMetricsFromSeries(fake[fake.length - 1] || { d: fmtDay(end) }));
+			setMetrics(buildMetricsFromSeries(fake[fake.length - 1] || { d: fmtDay(end), weightKg: 69.99 }));
 			return;
 		}
 
@@ -495,16 +520,16 @@ export function HealthSection({ id }: { id?: number | string }) {
 			}
 
 			const fixed = hasAnyRealData(rows) ? fillMissingWithFake(rows, days, start) : buildFakeSeries(days, start);
-			const last = fixed[fixed.length - 1] || { d: fmtDay(end) };
+			const last = fixed[fixed.length - 1] || { d: fmtDay(end), weightKg: 69.99 };
 
 			setSeries(fixed);
 			setSleepPie(buildSleepPieFromSeries(fixed));
-			setMetrics(buildFakeMetricsFromSeries(last));
+			setMetrics(buildMetricsFromSeries(last));
 		} catch {
 			const fake = buildFakeSeries(days, start);
 			setSeries(fake);
 			setSleepPie(buildSleepPieFromSeries(fake));
-			setMetrics(buildFakeMetricsFromSeries(fake[fake.length - 1] || { d: fmtDay(end) }));
+			setMetrics(buildMetricsFromSeries(fake[fake.length - 1] || { d: fmtDay(end), weightKg: 69.99 }));
 		} finally {
 			setLoading(false);
 		}
@@ -575,9 +600,20 @@ export function HealthSection({ id }: { id?: number | string }) {
 				</TextField>
 			</Box>
 
-			<Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, justifyContent: "space-between" }}>
-				{filtered.map(({ metric }) => (
-					<Box key={metric.key} sx={{ flex: "1 1 calc(20% - 16px)", minWidth: 160 }}>
+			<Box
+				sx={{
+					display: "grid",
+					gap: 2,
+					gridTemplateColumns: {
+						xs: "1fr",
+						sm: "repeat(2, minmax(0, 1fr))",
+						lg: "repeat(5, minmax(0, 1fr))",
+					},
+					alignItems: "stretch",
+				}}
+			>
+				{filtered.slice(0, 5).map(({ metric }) => (
+					<Box key={metric.key} sx={{ minWidth: 0 }}>
 						<StatCard m={metric} />
 					</Box>
 				))}
@@ -602,6 +638,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 						</BarChart>
 					</ChartCard>
 				</Box>
+
 				<Box sx={{ minWidth: 0 }}>
 					<ChartCard title="Nhịp tim (BPM) theo ngày">
 						<LineChart data={loading ? [] : series}>
@@ -614,6 +651,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 						</LineChart>
 					</ChartCard>
 				</Box>
+
 				<Box sx={{ minWidth: 0 }}>
 					<ChartCard title={`Cấu trúc giấc ngủ (${range === "7d" ? "7 ngày" : "30 ngày"})`}>
 						<PieChart>
@@ -627,6 +665,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 						</PieChart>
 					</ChartCard>
 				</Box>
+
 				<Box sx={{ minWidth: 0 }}>
 					<ChartCard title="SpO₂ & Đường huyết theo ngày">
 						<LineChart data={loading ? [] : series}>

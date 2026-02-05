@@ -93,10 +93,11 @@ const MetricCard = React.memo(function MetricCard({ m }: { m: Metric }) {
 	const isWeightLb = m.key === "weight" && ((m.unit || "").toLowerCase() === "lb" || /lb/i.test(m.value));
 	const displayValue = isWeightLb ? String(lbToKg(toNumber(m.value))) : m.value;
 	const displayUnit = isWeightLb ? "kg" : m.unit;
+
 	return (
-		<Card sx={{ height: "100%", borderRadius: 2 }}>
-			<CardContent>
-				<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1.25, gap: 1 }}>
+		<Card sx={{ height: "100%", borderRadius: 2, minWidth: 0 }}>
+			<CardContent sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+				<Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
 					<Typography variant="subtitle1" sx={{ fontWeight: 600, flex: "1 1 auto", minWidth: 0 }}>
 						{m.label}
 					</Typography>
@@ -115,19 +116,22 @@ const MetricCard = React.memo(function MetricCard({ m }: { m: Metric }) {
 						<Icon weight="fill" />
 					</Box>
 				</Box>
-				<Box sx={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 1 }}>
-					<Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
-						<Typography variant="h5" sx={{ fontWeight: 700 }}>
-							{displayValue}
+
+				<Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
+					<Typography variant="h5" sx={{ fontWeight: 700 }}>
+						{displayValue}
+					</Typography>
+					{displayUnit ? (
+						<Typography variant="body2" color="text.secondary">
+							{displayUnit}
 						</Typography>
-						{displayUnit ? (
-							<Typography variant="body2" color="text.secondary">
-								{displayUnit}
-							</Typography>
-						) : null}
-					</Box>
+					) : null}
+				</Box>
+
+				<Box sx={{ display: "flex", justifyContent: "flex-start" }}>
 					<Chip size="small" label={evalRes.label} color={evalRes.chipColor} />
 				</Box>
+
 				{m.helper ? (
 					<Typography variant="caption" color="text.secondary">
 						{m.helper}
@@ -308,6 +312,7 @@ export default function Page(): React.JSX.Element {
 
 			(hrs as HrRow[]).forEach((r) => {
 				const t = r.timestamp ? Number(r.timestamp) : 0;
+				if (!t) return;
 				const k = startOfDayMs(new Date(t));
 				const m = map.get(k) || { hr: [], sp: [], st: 0, slHours: [] };
 				if (typeof (r as any).heartValue === "number") m.hr.push((r as any).heartValue);
@@ -316,6 +321,7 @@ export default function Page(): React.JSX.Element {
 
 			(spo2s as Spo2Row[]).forEach((r) => {
 				const t = r.timestamp ? Number(r.timestamp) : 0;
+				if (!t) return;
 				const k = startOfDayMs(new Date(t));
 				const m = map.get(k) || { hr: [], sp: [], st: 0, slHours: [] };
 				if (typeof (r as any).oxygenValue === "number") m.sp.push((r as any).oxygenValue);
@@ -324,6 +330,7 @@ export default function Page(): React.JSX.Element {
 
 			(steps as StepsRow[]).forEach((r) => {
 				const t = r.timestamp ? Number(r.timestamp) : 0;
+				if (!t) return;
 				const k = startOfDayMs(new Date(t));
 				const m = map.get(k) || { hr: [], sp: [], st: 0, slHours: [] };
 				if (typeof (r as any).stepValue === "number") m.st += (r as any).stepValue;
@@ -343,6 +350,7 @@ export default function Page(): React.JSX.Element {
 			});
 
 			const keys = Array.from(map.keys()).sort((a, b) => a - b);
+
 			const rows: DayPoint[] = keys.map((k) => {
 				const v = map.get(k)!;
 				const avg = (arr: number[]) => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : undefined);
@@ -440,61 +448,64 @@ export default function Page(): React.JSX.Element {
 				</TextField>
 			</Box>
 
-			<Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+			<Box
+				sx={{
+					display: "grid",
+					gap: 3,
+					gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(5, minmax(0, 1fr))" },
+					alignItems: "stretch",
+				}}
+			>
 				{filtered.slice(0, 5).map(({ metric }) => (
-					<Box
-						key={metric.key}
-						sx={{ flex: { xs: "1 1 100%", sm: "1 1 calc(50% - 12px)", md: "1 1 calc(20% - 12px)" } }}
-					>
+					<Box key={metric.key} sx={{ minWidth: 0 }}>
 						<MetricCard m={metric} />
 					</Box>
 				))}
 			</Box>
 
-			<Box sx={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-				<Box sx={{ flex: { xs: "1 1 100%", md: "1 1 calc(50% - 12px)" } }}>
-					<Card sx={{ height: 400, borderRadius: 2 }}>
-						<CardContent sx={{ height: "100%" }}>
-							<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-								Bước đi theo ngày
-							</Typography>
-							<StepsBar data={series} />
-						</CardContent>
-					</Card>
-				</Box>
+			<Box
+				sx={{
+					display: "grid",
+					gap: 3,
+					gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+					alignItems: "stretch",
+				}}
+			>
+				<Card sx={{ height: 400, borderRadius: 2, minWidth: 0 }}>
+					<CardContent sx={{ height: "100%" }}>
+						<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+							Bước đi theo ngày
+						</Typography>
+						<StepsBar data={series} />
+					</CardContent>
+				</Card>
 
-				<Box sx={{ flex: { xs: "1 1 100%", md: "1 1 calc(50% - 12px)" } }}>
-					<Card sx={{ height: 400, borderRadius: 2 }}>
-						<CardContent sx={{ height: "100%" }}>
-							<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-								Nhịp tim (BPM) theo ngày
-							</Typography>
-							<BpmLine data={series} />
-						</CardContent>
-					</Card>
-				</Box>
+				<Card sx={{ height: 400, borderRadius: 2, minWidth: 0 }}>
+					<CardContent sx={{ height: "100%" }}>
+						<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+							Nhịp tim (BPM) theo ngày
+						</Typography>
+						<BpmLine data={series} />
+					</CardContent>
+				</Card>
 
-				<Box sx={{ flex: { xs: "1 1 100%", md: "1 1 calc(50% - 12px)" } }}>
-					<Card sx={{ height: 400, borderRadius: 2 }}>
-						<CardContent sx={{ height: "100%" }}>
-							<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-								Cấu trúc giấc ngủ
-							</Typography>
-							<SleepPie data={sleepPie} />
-						</CardContent>
-					</Card>
-				</Box>
+				<Card sx={{ height: 400, borderRadius: 2, minWidth: 0 }}>
+					<CardContent sx={{ height: "100%" }}>
+						<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+							Cấu trúc giấc ngủ
+						</Typography>
+						<SleepPie data={sleepPie} />
+					</CardContent>
+				</Card>
 
-				<Box sx={{ flex: { xs: "1 1 100%", md: "1 1 calc(50% - 12px)" } }}>
-					<Card sx={{ height: 400, borderRadius: 2 }}>
-						<CardContent sx={{ height: "100%" }}>
-							<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-								SpO₂
-							</Typography>
-							<SpO2GlucoseLine data={series} />
-						</CardContent>
-					</Card>
-				</Box>
+				<Card sx={{ height: 400, borderRadius: 2, minWidth: 0 }}>
+					<CardContent sx={{ height: "100%" }}>
+						<Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+							SpO₂
+						</Typography>
+						<SpO2GlucoseLine data={series} />
+					</CardContent>
+				</Card>
 			</Box>
 		</Box>
 	);
