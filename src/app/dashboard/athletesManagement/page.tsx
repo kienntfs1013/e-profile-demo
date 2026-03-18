@@ -43,6 +43,13 @@ function isAthlete(u: UserDTO): boolean {
 	const r = (u.role as any)?.toString?.().toLowerCase?.() ?? "";
 	return r === "athlete" || r === "vận động viên" || r === "van dong vien" || r === "1";
 }
+
+function isManagerRole(role?: string | number | null): boolean {
+	if (role === undefined || role === null) return false;
+	const r = String(role).toLowerCase().trim();
+	return r === "3" || r === "manager" || r === "quản lý" || r === "quan ly";
+}
+
 function fullName(u: UserDTO): string {
 	const ln = u.lastName?.trim() ?? "";
 	const fn = u.firstName?.trim() ?? "";
@@ -50,6 +57,7 @@ function fullName(u: UserDTO): string {
 	if (byName) return byName;
 	return u.email ? u.email.split("@")[0] : "Người dùng";
 }
+
 function calcAge(birthday?: string): number | undefined {
 	if (!birthday) return undefined;
 	const d = new Date(birthday);
@@ -60,6 +68,7 @@ function calcAge(birthday?: string): number | undefined {
 	if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
 	return age;
 }
+
 function normalizeSport(input?: string): SportCode {
 	const s = (input || "").toLowerCase().trim();
 	if (!s) return "";
@@ -69,6 +78,7 @@ function normalizeSport(input?: string): SportCode {
 	if (s.includes("box")) return "boxing";
 	return "";
 }
+
 function normalizeGender(input?: string | number | null): "Nam" | "Nữ" | "Khác" | "-" {
 	if (input === undefined || input === null) return "-";
 	const v = String(input).toLowerCase().trim();
@@ -76,6 +86,7 @@ function normalizeGender(input?: string | number | null): "Nam" | "Nữ" | "Khá
 	if (["nữ", "nu", "female", "f", "0", "2"].includes(v)) return "Nữ";
 	return "Khác";
 }
+
 function sportLabelVi(code?: SportCode): string {
 	switch (code) {
 		case "shooting":
@@ -113,6 +124,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 	const [q, setQ] = React.useState("");
 	const [status, setStatus] = React.useState<"all" | "active" | "paused">("all");
 	const [genderFilter, setGenderFilter] = React.useState<"all" | "Nam" | "Nữ" | "Khác" | "-">("all");
+	const [sportFilter, setSportFilter] = React.useState<"all" | SportCode>("all");
 
 	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(10);
@@ -124,6 +136,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 	const qDeferred = React.useDeferredValue(q);
 	const reqIdRef = React.useRef(0);
 	const [assignedAthleteIds, setAssignedAthleteIds] = React.useState<number[] | null>(null);
+	const [viewerRole, setViewerRole] = React.useState<string | number | null>(null);
 
 	const mapToRow = (u: UserDTO): Row => ({
 		id: String(u.id),
@@ -136,6 +149,16 @@ export default function AthletesManagementPage(): React.JSX.Element {
 		sport: normalizeSport(u.sport),
 		gender: normalizeGender((u as any).gender),
 	});
+
+	const fetchViewerRole = React.useCallback(async (): Promise<string | number | null> => {
+		const viewerId = getLoggedInUserId?.() ?? null;
+		if (!viewerId) return null;
+		const users = await listAllUsers({});
+		const me = users.find((u) => Number(u.id) === Number(viewerId));
+		const role = me?.role;
+		if (typeof role === "string" || typeof role === "number") return role;
+		return null;
+	}, []);
 
 	const fetchAssignedIds = React.useCallback(async (): Promise<number[]> => {
 		const coachUserId = getLoggedInUserId?.() ?? null;
@@ -151,34 +174,47 @@ export default function AthletesManagementPage(): React.JSX.Element {
 			try {
 				setLoading(true);
 
-				let ids = assignedAthleteIds ?? [];
-				if (assignedAthleteIds === null) {
-					ids = await fetchAssignedIds();
+				let currentViewerRole = viewerRole;
+				if (currentViewerRole === null) {
+					currentViewerRole = await fetchViewerRole();
 					if (reqIdRef.current !== myReq) return;
-					setAssignedAthleteIds(ids);
-				}
-
-				if (!ids.length) {
-					setRows([]);
-					setTotal(0);
-					return;
+					setViewerRole(currentViewerRole);
 				}
 
 				const filters: Record<string, any> = { role: 1 };
 				if (status !== "all") filters.is_active = status === "active" ? 1 : 0;
 
 				const allUsers = await listAllUsers(filters);
-
 				if (reqIdRef.current !== myReq) return;
 
 				const viewerId = getLoggedInUserId?.();
 				const base = viewerId != null ? allUsers.filter((u) => Number(u.id) !== Number(viewerId)) : allUsers;
-
 				const onlyAthletes = base.filter(isAthlete);
-				const assignedOnly = onlyAthletes.filter((u) => ids.includes(Number(u.id)));
 
-				const clientFiltered = assignedOnly.filter((u) => {
-					const okGender = genderFilter === "all" ? true : normalizeGender((u as any).gender) === genderFilter;
+				let sourceUsers = onlyAthletes;
+
+				if (!isManagerRole(currentViewerRole)) {
+					let ids = assignedAthleteIds ?? [];
+					if (assignedAthleteIds === null) {
+						ids = await fetchAssignedIds();
+						if (reqIdRef.current !== myReq) return;
+						setAssignedAthleteIds(ids);
+					}
+
+					if (!ids.length) {
+						setRows([]);
+						setTotal(0);
+						return;
+					}
+
+					sourceUsers = onlyAthletes.filter((u) => ids.includes(Number(u.id)));
+				}
+
+				const clientFiltered = sourceUsers.filter((u) => {
+					const normalizedGender = normalizeGender((u as any).gender);
+					const normalizedSport = normalizeSport(u.sport);
+					const okGender = genderFilter === "all" ? true : normalizedGender === genderFilter;
+					const okSport = sportFilter === "all" ? true : normalizedSport === sportFilter;
 					const okQ = qDeferred
 						? [fullName(u), u.email, u.phoneNumber]
 								.filter(Boolean)
@@ -186,7 +222,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 								.toLowerCase()
 								.includes(qDeferred.toLowerCase())
 						: true;
-					return okGender && okQ;
+					return okGender && okSport && okQ;
 				});
 
 				const start = uiPage * pageSize;
@@ -200,7 +236,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 				if (reqIdRef.current === myReq) setLoading(false);
 			}
 		},
-		[qDeferred, genderFilter, status, assignedAthleteIds, fetchAssignedIds]
+		[qDeferred, genderFilter, sportFilter, status, assignedAthleteIds, fetchAssignedIds, viewerRole, fetchViewerRole]
 	);
 
 	React.useEffect(() => {
@@ -209,15 +245,9 @@ export default function AthletesManagementPage(): React.JSX.Element {
 
 	React.useEffect(() => {
 		setPage(0);
-	}, [qDeferred, genderFilter, status]);
+	}, [qDeferred, genderFilter, sportFilter, status]);
 
 	const goDetail = (id: string) => router.push(`/dashboard/customers/${id}`);
-
-	const onRequestDelete = (u: Row) => setConfirmUser(u);
-	const onCancelDelete = () => {
-		if (deleting) return;
-		setConfirmUser(null);
-	};
 
 	const reloadCurrent = React.useCallback(() => {
 		fetchPage(page, rowsPerPage);
@@ -230,11 +260,18 @@ export default function AthletesManagementPage(): React.JSX.Element {
 			const idNum = Number(confirmUser.id);
 			if (Number.isNaN(idNum)) throw new Error("ID người dùng không hợp lệ");
 
-			const coachUserId = getLoggedInUserId?.() ?? null;
-			if (coachUserId) {
-				const matches = await listAthleteCoachAssignments({ coach_id: coachUserId, athlete_id: idNum });
+			if (isManagerRole(viewerRole)) {
+				const matches = await listAthleteCoachAssignments({ athlete_id: idNum });
 				for (const m of matches) {
 					await deleteAssignmentById(m.id);
+				}
+			} else {
+				const coachUserId = getLoggedInUserId?.() ?? null;
+				if (coachUserId) {
+					const matches = await listAthleteCoachAssignments({ coach_id: coachUserId, athlete_id: idNum });
+					for (const m of matches) {
+						await deleteAssignmentById(m.id);
+					}
 				}
 			}
 
@@ -243,7 +280,6 @@ export default function AthletesManagementPage(): React.JSX.Element {
 
 			setToast({ type: "success", message: "Đã xóa người dùng và liên kết huấn luyện" });
 			setConfirmUser(null);
-
 			setAssignedAthleteIds(null);
 			reloadCurrent();
 		} catch (e: any) {
@@ -264,9 +300,26 @@ export default function AthletesManagementPage(): React.JSX.Element {
 				alignItems={{ xs: "stretch", md: "center" }}
 				justifyContent="space-between"
 			>
-				<Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ flex: 1, minWidth: 0 }}>
+				<Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ flex: 1, minWidth: 0, flexWrap: "wrap" }}>
 					<Box sx={{ flex: 1, minWidth: 240 }}>
 						<TextField fullWidth size="small" label="Tìm kiếm" value={q} onChange={(e) => setQ(e.target.value)} />
+					</Box>
+
+					<Box sx={{ width: { xs: "100%", sm: 220 } }}>
+						<TextField
+							select
+							fullWidth
+							size="small"
+							label="Bộ môn"
+							value={sportFilter}
+							onChange={(e) => setSportFilter(e.target.value as "all" | SportCode)}
+						>
+							<MenuItem value="all">Tất cả</MenuItem>
+							<MenuItem value="shooting">Bắn súng</MenuItem>
+							<MenuItem value="archery">Bắn cung</MenuItem>
+							<MenuItem value="taekwondo">Taekwondo</MenuItem>
+							<MenuItem value="boxing">Boxing</MenuItem>
+						</TextField>
 					</Box>
 
 					<Box sx={{ width: { xs: "100%", sm: 220 } }}>

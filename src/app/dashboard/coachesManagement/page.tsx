@@ -40,11 +40,19 @@ const VISIBLE_COLS = 7;
 const DEFAULT_ORDER = "id-asc";
 
 type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
+type ViewerRole = "manager" | "other";
 
 function isCoach(u: UserDTO): boolean {
 	const r = (u.role as any)?.toString?.().toLowerCase?.() ?? "";
 	return r === "coach" || r === "huấn luyện viên" || r === "huan luyen vien" || r === "2";
 }
+
+function isManager(u?: UserDTO | null): boolean {
+	if (!u) return false;
+	const r = (u.role as any)?.toString?.().toLowerCase?.() ?? "";
+	return r === "manager" || r === "quản lý" || r === "quan ly" || r === "3";
+}
+
 function fullName(u: UserDTO): string {
 	const ln = u.lastName?.trim() ?? "";
 	const fn = u.firstName?.trim() ?? "";
@@ -52,6 +60,7 @@ function fullName(u: UserDTO): string {
 	if (byName) return byName;
 	return u.email ? u.email.split("@")[0] : "Người dùng";
 }
+
 function calcAge(birthday?: string): number | undefined {
 	if (!birthday) return undefined;
 	const d = new Date(birthday);
@@ -62,6 +71,7 @@ function calcAge(birthday?: string): number | undefined {
 	if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
 	return age;
 }
+
 function normalizeSport(input?: string): SportCode {
 	const s = (input || "").toLowerCase().trim();
 	if (!s) return "";
@@ -71,6 +81,7 @@ function normalizeSport(input?: string): SportCode {
 	if (s.includes("box")) return "boxing";
 	return "";
 }
+
 function normalizeGender(input?: string | number | null): "Nam" | "Nữ" | "Khác" | "-" {
 	if (input === undefined || input === null) return "-";
 	const v = String(input).toLowerCase().trim();
@@ -78,6 +89,7 @@ function normalizeGender(input?: string | number | null): "Nam" | "Nữ" | "Khá
 	if (["nữ", "nu", "female", "f", "0", "2"].includes(v)) return "Nữ";
 	return "Khác";
 }
+
 function sportLabelVi(code?: SportCode): string {
 	switch (code) {
 		case "shooting":
@@ -114,6 +126,7 @@ export default function CoachesManagementPage(): React.JSX.Element {
 	const [search, setSearch] = React.useState("");
 	const [status, setStatus] = React.useState<"all" | "active" | "paused">("all");
 	const [genderFilter, setGenderFilter] = React.useState<"all" | "Nam" | "Nữ" | "Khác" | "-">("all");
+	const [sportFilter, setSportFilter] = React.useState<"all" | SportCode>("all");
 
 	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(10);
@@ -123,6 +136,11 @@ export default function CoachesManagementPage(): React.JSX.Element {
 
 	const reqIdRef = React.useRef(0);
 	const [assignedCoachIds, setAssignedCoachIds] = React.useState<number[] | null>(null);
+	const [viewerRole, setViewerRole] = React.useState<ViewerRole | null>(null);
+
+	const [confirmUser, setConfirmUser] = React.useState<Row | null>(null);
+	const [deleting, setDeleting] = React.useState(false);
+	const [toast, setToast] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
 
 	const mapToRow = (u: UserDTO): Row => ({
 		id: String(u.id),
@@ -135,6 +153,14 @@ export default function CoachesManagementPage(): React.JSX.Element {
 		sport: normalizeSport(u.sport),
 		gender: normalizeGender((u as any).gender),
 	});
+
+	const fetchViewerRole = React.useCallback(async (): Promise<ViewerRole> => {
+		const userId = getLoggedInUserId?.() ?? null;
+		if (!userId) return "other";
+		const users = await listAllUsers({}, DEFAULT_ORDER);
+		const me = users.find((u) => Number(u.id) === Number(userId));
+		return isManager(me) ? "manager" : "other";
+	}, []);
 
 	const fetchAssignedIds = React.useCallback(async (): Promise<number[]> => {
 		const managerUserId = getLoggedInUserId?.() ?? null;
@@ -150,14 +176,21 @@ export default function CoachesManagementPage(): React.JSX.Element {
 			try {
 				setLoading(true);
 
+				let resolvedViewerRole = viewerRole;
+				if (resolvedViewerRole === null) {
+					resolvedViewerRole = await fetchViewerRole();
+					if (reqIdRef.current !== myReq) return;
+					setViewerRole(resolvedViewerRole);
+				}
+
 				let ids = assignedCoachIds ?? [];
-				if (assignedCoachIds === null) {
+				if (resolvedViewerRole !== "manager" && assignedCoachIds === null) {
 					ids = await fetchAssignedIds();
 					if (reqIdRef.current !== myReq) return;
 					setAssignedCoachIds(ids);
 				}
 
-				if (!ids.length) {
+				if (resolvedViewerRole !== "manager" && !ids.length) {
 					setRows([]);
 					setTotal(0);
 					return;
@@ -174,10 +207,13 @@ export default function CoachesManagementPage(): React.JSX.Element {
 				const myId = getLoggedInUserId?.();
 				const base = all.filter((u) => (myId ? Number(u.id) !== Number(myId) : true));
 				const onlyCoaches = base.filter(isCoach);
-				const assignedOnly = onlyCoaches.filter((u) => ids.includes(Number(u.id)));
+				const sourceUsers =
+					resolvedViewerRole === "manager" ? onlyCoaches : onlyCoaches.filter((u) => ids.includes(Number(u.id)));
 
-				const filtered = assignedOnly.filter((u) => {
+				const filtered = sourceUsers.filter((u) => {
+					const normalizedSport = normalizeSport(u.sport);
 					const okGender = genderFilter === "all" ? true : normalizeGender((u as any).gender) === genderFilter;
+					const okSport = sportFilter === "all" ? true : normalizedSport === sportFilter;
 					const okQ = searchDeferred
 						? [fullName(u), u.email, u.phoneNumber]
 								.filter(Boolean)
@@ -185,7 +221,7 @@ export default function CoachesManagementPage(): React.JSX.Element {
 								.toLowerCase()
 								.includes(searchDeferred.toLowerCase())
 						: true;
-					return okGender && okQ;
+					return okGender && okSport && okQ;
 				});
 
 				const start = uiPage * pageSize;
@@ -200,7 +236,7 @@ export default function CoachesManagementPage(): React.JSX.Element {
 				if (reqIdRef.current === myReq) setLoading(false);
 			}
 		},
-		[searchDeferred, genderFilter, status, assignedCoachIds, fetchAssignedIds]
+		[searchDeferred, genderFilter, sportFilter, status, assignedCoachIds, fetchAssignedIds, viewerRole, fetchViewerRole]
 	);
 
 	React.useEffect(() => {
@@ -209,15 +245,12 @@ export default function CoachesManagementPage(): React.JSX.Element {
 
 	React.useEffect(() => {
 		setPage(0);
-	}, [searchDeferred, genderFilter, status]);
+	}, [searchDeferred, genderFilter, sportFilter, status]);
 
 	const goDetail = (id: string) => router.push(`/dashboard/customers/${id}`);
 
-	const [confirmUser, setConfirmUser] = React.useState<Row | null>(null);
-	const [deleting, setDeleting] = React.useState(false);
-	const [toast, setToast] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
-
 	const onRequestDelete = (u: Row) => setConfirmUser(u);
+
 	const onCancelDelete = () => {
 		if (!deleting) setConfirmUser(null);
 	};
@@ -231,7 +264,10 @@ export default function CoachesManagementPage(): React.JSX.Element {
 
 			const managerUserId = getLoggedInUserId?.() ?? null;
 			if (managerUserId) {
-				const matches = await listManagementCoachAssignments({ manager_id: managerUserId, coach_id: idNum });
+				const matches =
+					viewerRole === "manager"
+						? await listManagementCoachAssignments({ coach_id: idNum })
+						: await listManagementCoachAssignments({ manager_id: managerUserId, coach_id: idNum });
 				for (const m of matches) await deleteManagementCoachAssignmentById(m.id);
 			}
 
@@ -240,7 +276,6 @@ export default function CoachesManagementPage(): React.JSX.Element {
 
 			setToast({ type: "success", message: "Đã xóa người dùng và liên kết quản lý" });
 			setConfirmUser(null);
-
 			setAssignedCoachIds(null);
 			fetchPage(page, rowsPerPage);
 		} catch (e: any) {
@@ -261,7 +296,7 @@ export default function CoachesManagementPage(): React.JSX.Element {
 				alignItems={{ xs: "stretch", md: "center" }}
 				justifyContent="space-between"
 			>
-				<Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ flex: 1, minWidth: 0 }}>
+				<Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ flex: 1, minWidth: 0, flexWrap: "wrap" }}>
 					<Box sx={{ flex: 1, minWidth: 240 }}>
 						<TextField
 							fullWidth
@@ -270,6 +305,23 @@ export default function CoachesManagementPage(): React.JSX.Element {
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
 						/>
+					</Box>
+
+					<Box sx={{ width: { xs: "100%", sm: 220 } }}>
+						<TextField
+							select
+							fullWidth
+							size="small"
+							label="Bộ môn"
+							value={sportFilter}
+							onChange={(e) => setSportFilter(e.target.value as typeof sportFilter)}
+						>
+							<MenuItem value="all">Tất cả</MenuItem>
+							<MenuItem value="shooting">Bắn súng</MenuItem>
+							<MenuItem value="archery">Bắn cung</MenuItem>
+							<MenuItem value="taekwondo">Taekwondo</MenuItem>
+							<MenuItem value="boxing">Boxing</MenuItem>
+						</TextField>
 					</Box>
 
 					<Box sx={{ width: { xs: "100%", sm: 220 } }}>
