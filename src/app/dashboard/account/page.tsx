@@ -23,7 +23,6 @@ import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
-import CardActions from "@mui/material/CardActions";
 import CardContent from "@mui/material/CardContent";
 import CardHeader from "@mui/material/CardHeader";
 import Divider from "@mui/material/Divider";
@@ -45,7 +44,10 @@ const sports = [
 	{ value: "boxing", label: "Boxing" },
 ] as const;
 
-const DEFAULT_AVATAR_URL = "https://upload.wikimedia.org/wikipedia/commons/a/a3/Image-not-found.png?20210521171500";
+const LEGACY_DEFAULT_AVATAR_PATTERNS = [
+	"pngtree-default-avatar-profile-icon",
+	"default-avatar-profile-icon-gray-placeholder",
+];
 
 type FormState = {
 	avatar?: string;
@@ -70,6 +72,7 @@ function vnToNationCode(country?: string): string {
 	const s = (country || "").toLowerCase();
 	return s.includes("việt") || s.includes("viet") ? "VIE" : "";
 }
+
 function normalizeGender(input?: string): FormState["gender"] {
 	const s = (input || "").toLowerCase().trim();
 	if (!s) return "";
@@ -77,13 +80,34 @@ function normalizeGender(input?: string): FormState["gender"] {
 	if (s.includes("nữ") || s.includes("nu") || s === "female") return "female";
 	return "other";
 }
+
 function take<T>(...vals: (T | undefined | null)[]): T | undefined {
-	for (const v of vals) if (v != null) return v as T;
+	for (const v of vals) {
+		if (v != null) return v as T;
+	}
 	return undefined;
 }
+
 function isValidEmail(v: string): boolean {
 	const re = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
 	return re.test(String(v || "").trim());
+}
+
+function isLegacyDefaultAvatar(value?: string | null): boolean {
+	const s = String(value || "")
+		.trim()
+		.toLowerCase();
+	if (!s) return false;
+	return LEGACY_DEFAULT_AVATAR_PATTERNS.some((pattern) => s.includes(pattern));
+}
+
+function resolveAvatarSrc(value?: string | null): string | undefined {
+	const raw = String(value || "").trim();
+	if (!raw || isLegacyDefaultAvatar(raw)) return undefined;
+	if (/^(blob:|data:|https?:\/\/)/i.test(raw)) return raw;
+	const built = buildImageUrl(raw);
+	if (!built || isLegacyDefaultAvatar(built)) return undefined;
+	return built;
 }
 
 export default function Page(): React.JSX.Element {
@@ -133,13 +157,14 @@ export default function Page(): React.JSX.Element {
 	const [pwdError, setPwdError] = React.useState<string | null>(null);
 
 	const fileRef = React.useRef<HTMLInputElement>(null);
-	const onPickFile = () => fileRef.current?.click();
-
 	const previewRef = React.useRef<string | null>(null);
+
+	const onPickFile = () => fileRef.current?.click();
 
 	const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
 		const f = e.target.files?.[0];
 		if (!f) return;
+
 		if (previewRef.current) URL.revokeObjectURL(previewRef.current);
 
 		const previewUrl = URL.createObjectURL(f);
@@ -150,7 +175,7 @@ export default function Page(): React.JSX.Element {
 			setUploadingAvatar(true);
 			const res = await uploadFile(f);
 			if (!res.ok) throw new Error(res.error || res.message || "Upload thất bại");
-			if (res.url) setAvatarUrl(res.url);
+			if (res.url) setAvatarUrl(resolveAvatarSrc(res.url));
 			if (res.path) setUploadedAvatarPath(res.path);
 			setRemovedAvatar(false);
 			setToast({ type: "success", message: "Tải ảnh thành công" });
@@ -158,6 +183,7 @@ export default function Page(): React.JSX.Element {
 			setToast({ type: "error", message: err?.message || "Không upload được ảnh" });
 		} finally {
 			setUploadingAvatar(false);
+			e.target.value = "";
 		}
 	};
 
@@ -167,7 +193,9 @@ export default function Page(): React.JSX.Element {
 		};
 	}, []);
 
-	const change = <K extends keyof FormState>(key: K, val: FormState[K]) => setForm((p) => ({ ...p, [key]: val }));
+	const change = <K extends keyof FormState>(key: K, val: FormState[K]) => {
+		setForm((p) => ({ ...p, [key]: val }));
+	};
 
 	const resolveUserId = React.useCallback(() => {
 		const fromQuery = Number(searchParams.get("uid") || "");
@@ -207,6 +235,7 @@ export default function Page(): React.JSX.Element {
 				const nation = vnToNationCode(take<string>(user.country, athlete?.nationality));
 				const gender = normalizeGender(String(take(user.gender, athlete?.gender) ?? ""));
 				const sport = (user.sport || "").trim().toLowerCase();
+
 				const sportValue =
 					sport === "boxing"
 						? "boxing"
@@ -219,9 +248,8 @@ export default function Page(): React.JSX.Element {
 									: "";
 
 				const avatar =
-					buildImageUrl(user.profile_picture_path) ||
-					buildImageUrl((athlete as AthleteDTO | null)?.athlete_profile_picture_path) ||
-					DEFAULT_AVATAR_URL;
+					resolveAvatarSrc(user.profile_picture_path) ||
+					resolveAvatarSrc((athlete as AthleteDTO | null)?.athlete_profile_picture_path);
 
 				const roleInt = parseRoleToInt(user.role);
 
@@ -266,6 +294,7 @@ export default function Page(): React.JSX.Element {
 			setEmailExists(false);
 			return false;
 		}
+
 		try {
 			setEmailChecking(true);
 			const res = await listUsersPage(1, { email: v }, undefined, 5);
@@ -288,6 +317,7 @@ export default function Page(): React.JSX.Element {
 			setPhoneExists(false);
 			return false;
 		}
+
 		try {
 			setPhoneChecking(true);
 			const res = await listUsersPage(1, { phoneNumber: v }, undefined, 5);
@@ -307,9 +337,10 @@ export default function Page(): React.JSX.Element {
 			URL.revokeObjectURL(previewRef.current);
 			previewRef.current = null;
 		}
-		setAvatarUrl(DEFAULT_AVATAR_URL);
+		setAvatarUrl(undefined);
 		setUploadedAvatarPath(undefined);
 		setRemovedAvatar(true);
+		setForm((prev) => ({ ...prev, avatar: undefined }));
 	};
 
 	const handleSaveProfile = async () => {
@@ -395,14 +426,17 @@ export default function Page(): React.JSX.Element {
 				setToast({ type: "error", message: "Không xác định được ID người dùng" });
 				return;
 			}
+
 			if (!pwd.current || !pwd.next || !pwd.next2) {
 				setPwdError("Vui lòng nhập đủ thông tin đổi mật khẩu");
 				return;
 			}
+
 			if (pwd.next.length < 6) {
 				setPwdError("Mật khẩu mới phải có ít nhất 6 ký tự");
 				return;
 			}
+
 			if (pwd.next !== pwd.next2) {
 				setPwdError("Mật khẩu mới nhập lại không khớp");
 				return;
@@ -442,7 +476,7 @@ export default function Page(): React.JSX.Element {
 					) : (
 						<Stack spacing={2}>
 							<Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
-								<Avatar src={avatarUrl} sx={{ width: 96, height: 96 }} />
+								<Avatar src={avatarUrl || undefined} sx={{ width: 96, height: 96 }} />
 								<Stack direction="row" spacing={1} alignItems="center">
 									<Button variant="outlined" onClick={onPickFile} disabled={uploadingAvatar}>
 										{uploadingAvatar ? "Đang tải ảnh..." : "Tải ảnh lên"}
@@ -472,6 +506,7 @@ export default function Page(): React.JSX.Element {
 										/>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth required>
 										<InputLabel>Tên</InputLabel>
@@ -483,6 +518,7 @@ export default function Page(): React.JSX.Element {
 										/>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth error={emailExists}>
 										<InputLabel>Email</InputLabel>
@@ -494,8 +530,11 @@ export default function Page(): React.JSX.Element {
 											onChange={(e) => change("email", e.target.value)}
 											onBlur={async () => {
 												const id = resolveUserId();
-												if (form.email && isValidEmail(form.email)) await checkEmailExists(form.email, id || undefined);
-												else setEmailExists(false);
+												if (form.email && isValidEmail(form.email)) {
+													await checkEmailExists(form.email, id || undefined);
+												} else {
+													setEmailExists(false);
+												}
 											}}
 										/>
 										{emailChecking ? (
@@ -505,6 +544,7 @@ export default function Page(): React.JSX.Element {
 										) : null}
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth error={phoneExists}>
 										<InputLabel>Số điện thoại</InputLabel>
@@ -516,8 +556,11 @@ export default function Page(): React.JSX.Element {
 											onChange={(e) => change("phone", e.target.value)}
 											onBlur={async () => {
 												const id = resolveUserId();
-												if (form.phone) await checkPhoneExists(form.phone, id || undefined);
-												else setPhoneExists(false);
+												if (form.phone) {
+													await checkPhoneExists(form.phone, id || undefined);
+												} else {
+													setPhoneExists(false);
+												}
 											}}
 										/>
 										{phoneChecking ? (
@@ -527,6 +570,7 @@ export default function Page(): React.JSX.Element {
 										) : null}
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth required>
 										<InputLabel>Quốc tịch</InputLabel>
@@ -547,6 +591,7 @@ export default function Page(): React.JSX.Element {
 										</Select>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth required>
 										<InputLabel>Giới tính</InputLabel>
@@ -565,6 +610,7 @@ export default function Page(): React.JSX.Element {
 										</Select>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth required>
 										<InputLabel shrink>Ngày sinh</InputLabel>
@@ -577,6 +623,7 @@ export default function Page(): React.JSX.Element {
 										/>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth required>
 										<InputLabel>Bộ môn</InputLabel>
@@ -592,6 +639,7 @@ export default function Page(): React.JSX.Element {
 										</Select>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth required>
 										<InputLabel>Vai trò</InputLabel>
@@ -604,6 +652,7 @@ export default function Page(): React.JSX.Element {
 										</Select>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth>
 										<InputLabel>Địa chỉ</InputLabel>
@@ -615,6 +664,7 @@ export default function Page(): React.JSX.Element {
 										/>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth>
 										<InputLabel>Quận/Huyện</InputLabel>
@@ -626,6 +676,7 @@ export default function Page(): React.JSX.Element {
 										/>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth>
 										<InputLabel>Tỉnh/Thành</InputLabel>
@@ -637,6 +688,7 @@ export default function Page(): React.JSX.Element {
 										/>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth>
 										<InputLabel>CMND/CCCD</InputLabel>
@@ -648,6 +700,7 @@ export default function Page(): React.JSX.Element {
 										/>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth>
 										<InputLabel>Hộ chiếu</InputLabel>
@@ -659,6 +712,7 @@ export default function Page(): React.JSX.Element {
 										/>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth>
 										<InputLabel shrink>Hạn hộ chiếu</InputLabel>
@@ -704,6 +758,7 @@ export default function Page(): React.JSX.Element {
 										/>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth>
 										<InputLabel>Mật khẩu mới</InputLabel>
@@ -715,6 +770,7 @@ export default function Page(): React.JSX.Element {
 										/>
 									</FormControl>
 								</Box>
+
 								<Box className="field">
 									<FormControl fullWidth error={Boolean(pwdError)}>
 										<InputLabel>Nhập lại mật khẩu mới</InputLabel>

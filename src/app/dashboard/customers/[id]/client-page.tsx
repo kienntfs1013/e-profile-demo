@@ -36,6 +36,11 @@ const AchievementSection = dynamic(
 	{ ssr: false, loading: () => <Box p={2}>Đang tải mục Thành tích…</Box> }
 );
 
+const LEGACY_DEFAULT_AVATAR_PATTERNS = [
+	"pngtree-default-avatar-profile-icon",
+	"default-avatar-profile-icon-gray-placeholder",
+];
+
 const sportLabel = (v?: string) => {
 	if (!v) return "-";
 	const s = v.toLowerCase();
@@ -45,6 +50,24 @@ const sportLabel = (v?: string) => {
 	if (s.includes("boxing")) return "Boxing";
 	return v;
 };
+
+const isLegacyDefaultAvatar = (value?: string | null): boolean => {
+	const s = String(value || "")
+		.trim()
+		.toLowerCase();
+	if (!s) return false;
+	return LEGACY_DEFAULT_AVATAR_PATTERNS.some((pattern) => s.includes(pattern));
+};
+
+const resolveAvatarSrc = (value?: string | null): string | undefined => {
+	const raw = String(value || "").trim();
+	if (!raw || isLegacyDefaultAvatar(raw)) return undefined;
+	if (/^(blob:|data:|https?:\/\/)/i.test(raw)) return raw;
+	const built = buildImageUrl(raw);
+	if (!built || isLegacyDefaultAvatar(built)) return undefined;
+	return built;
+};
+
 type DetailUser = {
 	id: string;
 	name?: string;
@@ -60,7 +83,9 @@ type DetailUser = {
 	createdAt?: string;
 	address?: { street?: string; city?: string; state?: string };
 };
+
 type TabKey = "general" | "health" | "training" | "media" | "achievement";
+
 const TABS: { key: TabKey; label: string }[] = [
 	{ key: "general", label: "Thông tin chung" },
 	{ key: "health", label: "Sức khỏe" },
@@ -76,6 +101,7 @@ function toName(u: Partial<UserDTO>, a?: any) {
 	if (byName) return byName;
 	return u.email ? u.email.split("@")[0] : "Người dùng";
 }
+
 function toGenderCode(g?: string): "male" | "female" | "other" | undefined {
 	const s = (g ?? "").toLowerCase();
 	if (!s) return undefined;
@@ -83,6 +109,7 @@ function toGenderCode(g?: string): "male" | "female" | "other" | undefined {
 	if (s.includes("nữ") || s.includes("nu") || s === "female") return "female";
 	return "other";
 }
+
 function toSportCode(s?: string): "shooting" | "archery" | "taekwondo" | "boxing" | undefined {
 	const v = (s ?? "").toLowerCase();
 	if (!v) return undefined;
@@ -92,20 +119,23 @@ function toSportCode(s?: string): "shooting" | "archery" | "taekwondo" | "boxing
 	if (v.includes("boxing")) return "boxing";
 	return undefined;
 }
+
 function toRoleLabel(role: unknown): string {
 	const r = String(role ?? "").toLowerCase();
 	if (r === "1" || /athlete|vận|van/.test(r)) return "Vận động viên";
 	if (r === "2" || /coach|huấn|huan/.test(r)) return "Huấn luyện viên";
 	return r || "-";
 }
+
 function isAthleteRole(role: unknown): boolean {
 	if (role == null) return false;
 	if (typeof role === "number") return role === 1;
+	if (typeof role === "object" && "id" in (role as any)) return Number((role as any).id) === 1;
 	const s = String(role).toLowerCase().trim();
 	if (s === "1") return true;
-	if (typeof role === "object" && "id" in (role as any)) return Number((role as any).id) === 1;
 	return /athlete|vận|van/.test(s);
 }
+
 function calcAge(birthday?: string): number | undefined {
 	if (!birthday) return undefined;
 	const d = new Date(birthday);
@@ -149,6 +179,7 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 
 				const viewerId = getLoggedInUserId?.() || null;
 				const numericId = Number(id);
+
 				if (!Number.isFinite(numericId)) {
 					if (mounted) setUser(undefined);
 					return;
@@ -166,6 +197,7 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 				if (!mounted) return;
 
 				if (viewer) setViewerIsAthlete(isAthleteRole(viewer.role));
+
 				if (!apiUser) {
 					setUser(undefined);
 					return;
@@ -175,9 +207,7 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 					id: String(apiUser.id),
 					name: toName(apiUser, athlete ?? undefined),
 					avatar:
-						buildImageUrl(apiUser.profile_picture_path) ||
-						buildImageUrl(athlete?.athlete_profile_picture_path) ||
-						"/assets/avatar.png",
+						resolveAvatarSrc(apiUser.profile_picture_path) || resolveAvatarSrc(athlete?.athlete_profile_picture_path),
 					email: apiUser.email ?? undefined,
 					role: toRoleLabel(apiUser.role),
 					age: calcAge(apiUser.birthday ?? athlete?.date_of_birth),
@@ -187,7 +217,7 @@ export default function ClientPage({ id }: { id: string }): React.JSX.Element {
 						apiUser.gender !== undefined
 							? String(apiUser.gender)
 							: athlete?.gender !== undefined
-								? String(athlete?.gender)
+								? String(athlete.gender)
 								: undefined
 					),
 					birthday: (apiUser.birthday ?? athlete?.date_of_birth) || undefined,

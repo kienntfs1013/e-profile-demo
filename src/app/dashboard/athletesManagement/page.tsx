@@ -39,17 +39,6 @@ import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
 const visibleColCount = 7;
 
-function isAthlete(u: UserDTO): boolean {
-	const r = (u.role as any)?.toString?.().toLowerCase?.() ?? "";
-	return r === "athlete" || r === "vận động viên" || r === "van dong vien" || r === "1";
-}
-
-function isManagerRole(role?: string | number | null): boolean {
-	if (role === undefined || role === null) return false;
-	const r = String(role).toLowerCase().trim();
-	return r === "3" || r === "manager" || r === "quản lý" || r === "quan ly";
-}
-
 function fullName(u: UserDTO): string {
 	const ln = u.lastName?.trim() ?? "";
 	const fn = u.firstName?.trim() ?? "";
@@ -135,8 +124,6 @@ export default function AthletesManagementPage(): React.JSX.Element {
 
 	const qDeferred = React.useDeferredValue(q);
 	const reqIdRef = React.useRef(0);
-	const [assignedAthleteIds, setAssignedAthleteIds] = React.useState<number[] | null>(null);
-	const [viewerRole, setViewerRole] = React.useState<string | number | null>(null);
 
 	const mapToRow = (u: UserDTO): Row => ({
 		id: String(u.id),
@@ -150,36 +137,11 @@ export default function AthletesManagementPage(): React.JSX.Element {
 		gender: normalizeGender((u as any).gender),
 	});
 
-	const fetchViewerRole = React.useCallback(async (): Promise<string | number | null> => {
-		const viewerId = getLoggedInUserId?.() ?? null;
-		if (!viewerId) return null;
-		const users = await listAllUsers({});
-		const me = users.find((u) => Number(u.id) === Number(viewerId));
-		const role = me?.role;
-		if (typeof role === "string" || typeof role === "number") return role;
-		return null;
-	}, []);
-
-	const fetchAssignedIds = React.useCallback(async (): Promise<number[]> => {
-		const coachUserId = getLoggedInUserId?.() ?? null;
-		if (!coachUserId) return [];
-		const asgs = await listAthleteCoachAssignments({ coach_id: coachUserId });
-		const ids = asgs.map((a) => Number(a.athlete_id)).filter((n) => Number.isFinite(n));
-		return Array.from(new Set(ids));
-	}, []);
-
 	const fetchPage = React.useCallback(
 		async (uiPage: number, pageSize: number) => {
 			const myReq = ++reqIdRef.current;
 			try {
 				setLoading(true);
-
-				let currentViewerRole = viewerRole;
-				if (currentViewerRole === null) {
-					currentViewerRole = await fetchViewerRole();
-					if (reqIdRef.current !== myReq) return;
-					setViewerRole(currentViewerRole);
-				}
 
 				const filters: Record<string, any> = { role: 1 };
 				if (status !== "all") filters.is_active = status === "active" ? 1 : 0;
@@ -188,27 +150,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 				if (reqIdRef.current !== myReq) return;
 
 				const viewerId = getLoggedInUserId?.();
-				const base = viewerId != null ? allUsers.filter((u) => Number(u.id) !== Number(viewerId)) : allUsers;
-				const onlyAthletes = base.filter(isAthlete);
-
-				let sourceUsers = onlyAthletes;
-
-				if (!isManagerRole(currentViewerRole)) {
-					let ids = assignedAthleteIds ?? [];
-					if (assignedAthleteIds === null) {
-						ids = await fetchAssignedIds();
-						if (reqIdRef.current !== myReq) return;
-						setAssignedAthleteIds(ids);
-					}
-
-					if (!ids.length) {
-						setRows([]);
-						setTotal(0);
-						return;
-					}
-
-					sourceUsers = onlyAthletes.filter((u) => ids.includes(Number(u.id)));
-				}
+				const sourceUsers = viewerId != null ? allUsers.filter((u) => Number(u.id) !== Number(viewerId)) : allUsers;
 
 				const clientFiltered = sourceUsers.filter((u) => {
 					const normalizedGender = normalizeGender((u as any).gender);
@@ -236,7 +178,7 @@ export default function AthletesManagementPage(): React.JSX.Element {
 				if (reqIdRef.current === myReq) setLoading(false);
 			}
 		},
-		[qDeferred, genderFilter, sportFilter, status, assignedAthleteIds, fetchAssignedIds, viewerRole, fetchViewerRole]
+		[qDeferred, genderFilter, sportFilter, status]
 	);
 
 	React.useEffect(() => {
@@ -260,19 +202,9 @@ export default function AthletesManagementPage(): React.JSX.Element {
 			const idNum = Number(confirmUser.id);
 			if (Number.isNaN(idNum)) throw new Error("ID người dùng không hợp lệ");
 
-			if (isManagerRole(viewerRole)) {
-				const matches = await listAthleteCoachAssignments({ athlete_id: idNum });
-				for (const m of matches) {
-					await deleteAssignmentById(m.id);
-				}
-			} else {
-				const coachUserId = getLoggedInUserId?.() ?? null;
-				if (coachUserId) {
-					const matches = await listAthleteCoachAssignments({ coach_id: coachUserId, athlete_id: idNum });
-					for (const m of matches) {
-						await deleteAssignmentById(m.id);
-					}
-				}
+			const matches = await listAthleteCoachAssignments({ athlete_id: idNum });
+			for (const m of matches) {
+				await deleteAssignmentById(m.id);
 			}
 
 			const res = await deleteUser(idNum);
@@ -280,7 +212,6 @@ export default function AthletesManagementPage(): React.JSX.Element {
 
 			setToast({ type: "success", message: "Đã xóa người dùng và liên kết huấn luyện" });
 			setConfirmUser(null);
-			setAssignedAthleteIds(null);
 			reloadCurrent();
 		} catch (e: any) {
 			setToast({

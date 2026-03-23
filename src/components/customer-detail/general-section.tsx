@@ -1,10 +1,23 @@
 "use client";
 
 import * as React from "react";
-import { fetchUserByIdFromList, getLoggedInUserId, getUserById, type UserDTO } from "@/services/user.service";
+import {
+	buildImageUrl,
+	fetchUserByIdFromList,
+	getLoggedInUserId,
+	getUserById,
+	type UserDTO,
+} from "@/services/user.service";
+import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import dayjs from "dayjs";
+
+const LEGACY_DEFAULT_AVATAR_PATTERNS = [
+	"pngtree-default-avatar-profile-icon",
+	"default-avatar-profile-icon-gray-placeholder",
+];
 
 const genderLabel = (v?: string) => {
 	if (!v) return "-";
@@ -34,6 +47,23 @@ const isAthleteRole = (role: any): boolean => {
 
 const fmtDate = (v?: string) => (v ? dayjs(v).format("DD/MM/YYYY") : "-");
 
+const isLegacyDefaultAvatar = (value?: string | null): boolean => {
+	const s = String(value || "")
+		.trim()
+		.toLowerCase();
+	if (!s) return false;
+	return LEGACY_DEFAULT_AVATAR_PATTERNS.some((pattern) => s.includes(pattern));
+};
+
+const resolveAvatarSrc = (value?: string | null): string | undefined => {
+	const raw = String(value || "").trim();
+	if (!raw || isLegacyDefaultAvatar(raw)) return undefined;
+	if (/^(blob:|data:|https?:\/\/)/i.test(raw)) return raw;
+	const built = buildImageUrl(raw);
+	if (!built || isLegacyDefaultAvatar(built)) return undefined;
+	return built;
+};
+
 type Extra = {
 	district?: string;
 	city?: string;
@@ -47,6 +77,8 @@ type Extra = {
 	birthday?: string;
 	gender?: string;
 	role?: any;
+	profile_picture_path?: string;
+	avatar?: string;
 };
 
 export function GeneralSection({ id }: { id?: number | string }) {
@@ -55,6 +87,7 @@ export function GeneralSection({ id }: { id?: number | string }) {
 
 	React.useEffect(() => {
 		let off = false;
+
 		(async () => {
 			const viewerId = getLoggedInUserId?.();
 
@@ -78,6 +111,7 @@ export function GeneralSection({ id }: { id?: number | string }) {
 				if (!off) setU(null);
 			}
 		})();
+
 		return () => {
 			off = true;
 		};
@@ -85,6 +119,11 @@ export function GeneralSection({ id }: { id?: number | string }) {
 
 	const statusText =
 		(u as any)?.status ?? (u?.is_active != null ? (u.is_active === 1 ? "Đang hoạt động" : "Tạm ngưng") : "-");
+
+	const avatarSrc = resolveAvatarSrc((u as any)?.profile_picture_path ?? (u as any)?.avatar);
+
+	const displayName =
+		[u?.lastName, u?.firstName].filter(Boolean).join(" ").trim() || u?.email?.split("@")[0] || "Người dùng";
 
 	const allFields: { key: string; label: string; value: React.ReactNode }[] = [
 		{ key: "lastName", label: "Họ", value: u?.lastName ?? "-" },
@@ -97,7 +136,7 @@ export function GeneralSection({ id }: { id?: number | string }) {
 		{ key: "birthday", label: "Ngày sinh", value: fmtDate(u?.birthday) },
 		{ key: "national_id_card_no", label: "CMND/CCCD", value: u?.national_id_card_no ?? "-" },
 		{ key: "passport_no", label: "Hộ chiếu", value: u?.passport_no ?? "-" },
-		{ key: "address", label: "Địa chỉ", value: [u?.address, u?.city, u?.district].filter(Boolean).join(", ") || "-" },
+		{ key: "address", label: "Địa chỉ", value: [u?.address, u?.district, u?.city].filter(Boolean).join(", ") || "-" },
 		{ key: "district", label: "Quận/Huyện", value: u?.district ?? "-" },
 		{ key: "city", label: "Tỉnh/Thành", value: u?.city ?? "-" },
 		{ key: "country", label: "Quốc gia", value: u?.country ?? "-" },
@@ -117,33 +156,35 @@ export function GeneralSection({ id }: { id?: number | string }) {
 	const fields = viewerIsAthlete ? allFields.filter((f) => !hiddenForAthlete.has(f.key)) : allFields;
 
 	return (
-		<Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, "& > .item": { minWidth: 0 } }}>
-			{fields.map((f) => (
-				<Box
-					key={f.key}
-					className="item"
-					sx={{ flex: { xs: "1 1 100%", md: "1 1 260px" }, maxWidth: { xs: "100%", md: "100%" } }}
-				>
+		<Stack spacing={2.5}>
+			<Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, "& > .item": { minWidth: 0 } }}>
+				{fields.map((f) => (
 					<Box
-						sx={{
-							width: "100%",
-							border: "1px solid",
-							borderColor: "divider",
-							borderRadius: 1.5,
-							p: 1.5,
-							height: "100%",
-							boxSizing: "border-box",
-						}}
+						key={f.key}
+						className="item"
+						sx={{ flex: { xs: "1 1 100%", md: "1 1 260px" }, maxWidth: { xs: "100%", md: "100%" } }}
 					>
-						<Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
-							{f.label}
-						</Typography>
-						<Typography variant="body2" color="text.secondary">
-							{String(f.value ?? "-")}
-						</Typography>
+						<Box
+							sx={{
+								width: "100%",
+								border: "1px solid",
+								borderColor: "divider",
+								borderRadius: 1.5,
+								p: 1.5,
+								height: "100%",
+								boxSizing: "border-box",
+							}}
+						>
+							<Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+								{f.label}
+							</Typography>
+							<Typography variant="body2" color="text.secondary">
+								{String(f.value ?? "-")}
+							</Typography>
+						</Box>
 					</Box>
-				</Box>
-			))}
-		</Box>
+				))}
+			</Box>
+		</Stack>
 	);
 }

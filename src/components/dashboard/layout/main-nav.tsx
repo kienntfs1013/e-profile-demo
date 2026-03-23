@@ -21,6 +21,12 @@ import { usePopover } from "@/hooks/use-popover";
 import { MobileNav } from "./mobile-nav";
 import { UserPopover } from "./user-popover";
 
+const LEGACY_DEFAULT_AVATAR_PATTERNS = [
+	"pngtree-default-avatar-profile-icon",
+	"default-avatar-profile-icon-gray-placeholder",
+	"image-not-found.png",
+];
+
 function decodeJwtPayload(t?: string) {
 	try {
 		if (!t) return {};
@@ -61,14 +67,32 @@ function readLocalAuth() {
 	}
 }
 
+function isLegacyDefaultAvatar(value?: string | null): boolean {
+	const s = String(value || "")
+		.trim()
+		.toLowerCase();
+	if (!s) return false;
+	return LEGACY_DEFAULT_AVATAR_PATTERNS.some((pattern) => s.includes(pattern));
+}
+
+function resolveAvatarSrc(value?: string | null): string | undefined {
+	const raw = String(value || "").trim();
+	if (!raw || isLegacyDefaultAvatar(raw)) return undefined;
+	if (/^(blob:|data:|https?:\/\/)/i.test(raw)) return raw;
+	const built = buildImageUrl(raw);
+	if (!built || isLegacyDefaultAvatar(built)) return undefined;
+	return built;
+}
+
 export function MainNav(): React.JSX.Element {
 	const [openNav, setOpenNav] = React.useState<boolean>(false);
 	const userPopover = usePopover<HTMLDivElement>();
 	const [displayName, setDisplayName] = React.useState<string>("Người dùng");
-	const [avatarSrc, setAvatarSrc] = React.useState<string | undefined>("/assets/avatar.png");
+	const [avatarSrc, setAvatarSrc] = React.useState<string | undefined>(undefined);
 
 	React.useEffect(() => {
 		let cancelled = false;
+
 		(async () => {
 			try {
 				let uid = getLoggedInUserId();
@@ -94,9 +118,8 @@ export function MainNav(): React.JSX.Element {
 				const fullName = [last, first].filter(Boolean).join(" ") || nameFromEmail || "Người dùng";
 
 				const avatar =
-					buildImageUrl(user.profile_picture_path) ||
-					buildImageUrl((athlete as AthleteDTO | null)?.athlete_profile_picture_path) ||
-					"https://upload.wikimedia.org/wikipedia/commons/a/a3/Image-not-found.png?20210521171500";
+					resolveAvatarSrc(user.profile_picture_path) ||
+					resolveAvatarSrc((athlete as AthleteDTO | null)?.athlete_profile_picture_path);
 
 				if (!cancelled) {
 					setDisplayName(fullName);
@@ -104,6 +127,7 @@ export function MainNav(): React.JSX.Element {
 				}
 			} catch {}
 		})();
+
 		return () => {
 			cancelled = true;
 		};
@@ -135,7 +159,7 @@ export function MainNav(): React.JSX.Element {
 						<Typography sx={{ letterSpacing: 1, fontSize: "0.875rem" }}>{displayName}</Typography>
 						<Avatar
 							ref={userPopover.anchorRef}
-							src={avatarSrc}
+							src={avatarSrc || undefined}
 							alt={displayName}
 							sx={{ cursor: "pointer" }}
 							onClick={userPopover.handleOpen}
