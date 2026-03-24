@@ -168,8 +168,8 @@ export function MainNav(): React.JSX.Element {
 				</Stack>
 			</Box>
 
-			<UserPopover anchorEl={userPopover.anchorRef.current} onClose={userPopover.handleClose} open={userPopover.open} />
-			<MobileNav onClose={() => setOpenNav(false)} open={openNav} />
+			{/* <UserPopover anchorEl={userPopover.anchorRef.current} onClose={userPopover.handleClose} open={userPopover.open} /> */}
+			{/* <MobileNav onClose={() => setOpenNav(false)} open={openNav} /> */}
 		</>
 	);
 }

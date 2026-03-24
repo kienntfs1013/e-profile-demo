@@ -62,11 +62,11 @@ type FormState = {
 	passport_expiry_date?: string;
 };
 
-/* ---------- helpers nhỏ, tối giản ---------- */
 function vnToNationCode(country?: string): string {
 	const s = (country || "").toLowerCase();
 	return s.includes("việt") || s.includes("viet") ? "VIE" : "";
 }
+
 function normalizeGender(input?: string): FormState["gender"] {
 	const s = (input || "").toLowerCase().trim();
 	if (!s) return "";
@@ -74,9 +74,39 @@ function normalizeGender(input?: string): FormState["gender"] {
 	if (s.includes("nữ") || s.includes("nu") || s === "female") return "female";
 	return "other";
 }
+
 function take<T>(...vals: (T | undefined | null)[]): T | undefined {
 	for (const v of vals) if (v != null) return v as T;
 	return undefined;
+}
+
+function cleanText(v?: string | null): string | undefined {
+	const s = String(v ?? "").trim();
+	return s ? s : undefined;
+}
+
+function cleanDate(v?: string | null): string | undefined {
+	const s = String(v ?? "").trim();
+	return s ? s : undefined;
+}
+
+function extractErrorMessage(e: any): string {
+	const data = e?.response?.data;
+
+	if (typeof data === "string" && data.trim()) return data;
+	if (typeof data?.message === "string" && data.message.trim()) return data.message;
+	if (typeof data?.error === "string" && data.error.trim()) return data.error;
+
+	if (Array.isArray(data?.errors) && data.errors.length) {
+		return data.errors
+			.map((x: any) => (typeof x === "string" ? x : x?.message || x?.msg || "Lỗi dữ liệu"))
+			.filter(Boolean)
+			.join(", ");
+	}
+
+	if (typeof e?.message === "string" && e.message.trim()) return e.message;
+
+	return "Không thể lưu dữ liệu";
 }
 
 export default function ClientPage({ id }: Props): React.JSX.Element {
@@ -110,8 +140,8 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 	const fileRef = React.useRef<HTMLInputElement>(null);
 	const onPickFile = () => fileRef.current?.click();
 
-	// Giữ URL preview để revoke khi thay/thoát (tránh memory leak)
 	const previewRef = React.useRef<string | null>(null);
+
 	const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const f = e.target.files?.[0];
 		if (!f) return;
@@ -120,17 +150,18 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 		previewRef.current = url;
 		setAvatarUrl(url);
 	};
+
 	React.useEffect(() => {
 		return () => {
 			if (previewRef.current) URL.revokeObjectURL(previewRef.current);
 		};
 	}, []);
 
-	const change = <K extends keyof FormState>(key: K, val: FormState[K]) => setForm((p) => ({ ...p, [key]: val }));
+	const change = <K extends keyof FormState>(key: K, val: FormState[K]) => {
+		setForm((p) => ({ ...p, [key]: val }));
+	};
 
-	/* ---------- LOAD USER + ATHLETE (ưu tiên getUserById, có hủy request) ---------- */
 	React.useEffect(() => {
-		const controller = new AbortController();
 		let mounted = true;
 
 		(async () => {
@@ -144,13 +175,10 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 					return;
 				}
 
-				const [user, athlete] = await Promise.all([
-					// nếu bạn đã thêm cache ở service, có thể truyền { signal: controller.signal }
-					getUserById(uid),
-					fetchAthleteByUserId(uid).catch(() => null),
-				]);
+				const [user, athlete] = await Promise.all([getUserById(uid), fetchAthleteByUserId(uid).catch(() => null)]);
 
 				if (!mounted) return;
+
 				if (!user) {
 					setFetchError("Không tìm thấy người dùng");
 					return;
@@ -181,7 +209,7 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 				const avatar =
 					buildImageUrl(user.profile_picture_path) ||
 					buildImageUrl((athlete as AthleteDTO | null)?.athlete_profile_picture_path) ||
-					"https://upload.wikimedia.org/wikipedia/commons/a/a3/Image-not-found.png?20210521171500";
+					undefined;
 
 				const roleInt = parseRoleToInt(user.role);
 
@@ -196,19 +224,18 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 					birthday,
 					sport: sportValue,
 					role: (roleInt as 1 | 2 | undefined) ?? "",
-					address: user.address,
-					district: user.district,
-					city: user.city,
-					national_id_card_no: user.national_id_card_no,
-					passport_no: user.passport_no,
+					address: user.address || "",
+					district: user.district || "",
+					city: user.city || "",
+					national_id_card_no: user.national_id_card_no || "",
+					passport_no: user.passport_no || "",
 					passport_expiry_date: user.passport_expiry_date ? String(user.passport_expiry_date).slice(0, 10) : "",
 				};
 
 				setForm(nextForm);
 				setAvatarUrl(nextForm.avatar);
 			} catch (e: any) {
-				if (e?.name === "AbortError") return;
-				setFetchError(e?.response?.data?.message || e?.message || "Không tải được dữ liệu");
+				setFetchError(extractErrorMessage(e));
 			} finally {
 				if (mounted) setLoading(false);
 			}
@@ -216,11 +243,9 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 
 		return () => {
 			mounted = false;
-			controller.abort();
 		};
 	}, [id]);
 
-	/* ---------- SAVE ---------- */
 	const handleSave = async () => {
 		try {
 			setSaving(true);
@@ -238,30 +263,33 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 				return;
 			}
 
-			await updateUserByIdMerged(uid, {
-				firstName: form.firstName,
-				lastName: form.lastName,
-				email: form.email,
-				phoneNumber: form.phone,
-				gender: mapGenderToVN(form.gender),
-				birthday: form.birthday || undefined,
+			const payload = {
+				firstName: cleanText(form.firstName) ?? current.firstName,
+				lastName: cleanText(form.lastName) ?? current.lastName,
+				email: cleanText(form.email) ?? current.email,
+				phoneNumber: cleanText(form.phone) ?? current.phoneNumber,
+				gender: mapGenderToVN(form.gender) ?? current.gender,
+				birthday: cleanDate(form.birthday) ?? current.birthday ?? undefined,
 				sport: mapSportToVN(form.sport) ?? current.sport,
 				country: mapNationToCountry(form.nation) ?? current.country ?? "Việt Nam",
 				role: form.role !== "" ? Number(form.role) : parseRoleToInt(current.role),
-				profile_picture_path: current.profile_picture_path, // phần upload chưa đẩy server, nên giữ như cũ
-				address: form.address || current.address,
-				district: form.district || current.district,
-				city: form.city || current.city,
-				national_id_card_no: form.national_id_card_no || current.national_id_card_no,
-				passport_no: form.passport_no || current.passport_no,
-				passport_expiry_date: form.passport_expiry_date || current.passport_expiry_date,
+				profile_picture_path: current.profile_picture_path ?? undefined,
+				address: cleanText(form.address) ?? current.address ?? undefined,
+				district: cleanText(form.district) ?? current.district ?? undefined,
+				city: cleanText(form.city) ?? current.city ?? undefined,
+				national_id_card_no: cleanText(form.national_id_card_no) ?? current.national_id_card_no ?? undefined,
+				passport_no: cleanText(form.passport_no) ?? current.passport_no ?? undefined,
+				passport_expiry_date: cleanDate(form.passport_expiry_date) ?? current.passport_expiry_date ?? undefined,
 				is_active: current.is_active ?? 1,
-			});
+			};
+
+			await updateUserByIdMerged(uid, payload);
 
 			setToast({ type: "success", message: "Đã lưu thay đổi" });
 			router.refresh();
 		} catch (e: any) {
-			const msg = e?.response?.data?.message || e?.message || "Lỗi kết nối Cơ Sở Dữ Liệu";
+			const msg = extractErrorMessage(e);
+			console.error("update user error:", e);
 			setToast({ type: "error", message: msg });
 		} finally {
 			setSaving(false);
@@ -281,7 +309,7 @@ export default function ClientPage({ id }: Props): React.JSX.Element {
 					) : (
 						<Stack spacing={2}>
 							<Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1 }}>
-								<Avatar src={avatarUrl} sx={{ width: 96, height: 96 }} />
+								<Avatar src={avatarUrl || undefined} sx={{ width: 96, height: 96 }} />
 								<Stack direction="row" spacing={1}>
 									<Button variant="outlined" onClick={onPickFile}>
 										Tải ảnh lên
