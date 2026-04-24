@@ -38,65 +38,6 @@ import { Trash } from "@phosphor-icons/react/dist/ssr/Trash";
 type SportKey = "all" | "shooting" | "archery" | "boxing" | "taekwondo";
 type RealSportKey = Exclude<SportKey, "all">;
 
-function normalizeSportKey(apiText?: string): RealSportKey | "" {
-	const s = (apiText || "").toLowerCase();
-	if (s.includes("shoot") || s.includes("bắn súng") || s.includes("ban sung")) return "shooting";
-	if (s.includes("arch") || s.includes("bắn cung") || s.includes("ban cung")) return "archery";
-	if (s.includes("taek")) return "taekwondo";
-	if (s.includes("box")) return "boxing";
-	return "";
-}
-
-function fmtDate(d?: string) {
-	if (!d) return "-";
-	const dt = new Date(d);
-	if (isNaN(+dt)) return d;
-	const dd = String(dt.getDate()).padStart(2, "0");
-	const mm = String(dt.getMonth() + 1).padStart(2, "0");
-	const yyyy = dt.getFullYear();
-	return `${dd}/${mm}/${yyyy}`;
-}
-
-function useDebouncedValue<T>(value: T, delay = 350) {
-	const [v, setV] = React.useState(value);
-	React.useEffect(() => {
-		const t = setTimeout(() => setV(value), delay);
-		return () => clearTimeout(t);
-	}, [value, delay]);
-	return v;
-}
-
-function sportLabel(sport: RealSportKey | "") {
-	if (sport === "shooting") return "Bắn súng";
-	if (sport === "archery") return "Bắn cung";
-	if (sport === "taekwondo") return "Taekwondo";
-	if (sport === "boxing") return "Boxing";
-	return "-";
-}
-
-function parseDateValue(v?: string) {
-	if (!v) return null;
-	const d = new Date(v);
-	return isNaN(+d) ? null : d;
-}
-
-function matchesDateRange(row: Row, from?: string, to?: string) {
-	if (!from && !to) return true;
-	const start = parseDateValue(row.start);
-	const end = parseDateValue(row.end) || start;
-	if (!start && !end) return false;
-
-	const rangeStart = (start || end) as Date;
-	const rangeEnd = (end || start) as Date;
-
-	const filterStart = from ? new Date(`${from}T00:00:00`) : null;
-	const filterEnd = to ? new Date(`${to}T23:59:59.999`) : null;
-
-	if (filterStart && rangeEnd.getTime() < filterStart.getTime()) return false;
-	if (filterEnd && rangeStart.getTime() > filterEnd.getTime()) return false;
-	return true;
-}
-
 type Row = {
 	id: number;
 	name: string;
@@ -171,11 +112,82 @@ const DEMO_ROWS: Row[] = [
 	},
 ];
 
+function normalizeSportKey(apiText?: string): RealSportKey | "" {
+	const s = (apiText || "").toLowerCase().trim();
+
+	if (s.includes("shoot") || s.includes("bắn súng") || s.includes("ban sung")) return "shooting";
+	if (s.includes("arch") || s.includes("bắn cung") || s.includes("ban cung")) return "archery";
+	if (s.includes("taek")) return "taekwondo";
+	if (s.includes("box")) return "boxing";
+
+	return "";
+}
+
+function sportLabel(sport: RealSportKey | "") {
+	if (sport === "shooting") return "Bắn súng";
+	if (sport === "archery") return "Bắn cung";
+	if (sport === "taekwondo") return "Taekwondo";
+	if (sport === "boxing") return "Boxing";
+
+	return "-";
+}
+
+function sportToApiValue(sport: SportKey): string | undefined {
+	if (sport === "shooting") return "Bắn súng";
+	if (sport === "archery") return "Bắn cung";
+	if (sport === "taekwondo") return "Taekwondo";
+	if (sport === "boxing") return "Boxing";
+
+	return undefined;
+}
+
+function fmtDate(d?: string) {
+	if (!d) return "-";
+
+	const dt = new Date(d);
+	if (Number.isNaN(+dt)) return d;
+
+	const dd = String(dt.getDate()).padStart(2, "0");
+	const mm = String(dt.getMonth() + 1).padStart(2, "0");
+	const yyyy = dt.getFullYear();
+
+	return `${dd}/${mm}/${yyyy}`;
+}
+
+function useDebouncedValue<T>(value: T, delay = 350) {
+	const [v, setV] = React.useState(value);
+
+	React.useEffect(() => {
+		const t = setTimeout(() => setV(value), delay);
+		return () => clearTimeout(t);
+	}, [value, delay]);
+
+	return v;
+}
+
+function isAbortError(e: any): boolean {
+	return e?.name === "AbortError" || e?.name === "CanceledError" || e?.code === "ERR_CANCELED";
+}
+
+function mapCompetitionToRow(c: CompetitionMasterDTO): Row {
+	return {
+		id: c.id,
+		name: c.competition_name || `Giải đấu #${c.id}`,
+		sport: normalizeSportKey(c.sport_type),
+		city: c.city,
+		country: c.country,
+		start: c.start_date,
+		end: c.end_date,
+		isDemo: false,
+	};
+}
+
 export default function CompetitionsPage(): React.JSX.Element {
 	const router = useRouter();
 
 	const [page, setPage] = React.useState(0);
 	const [rowsPerPage, setRowsPerPage] = React.useState(10);
+	const [total, setTotal] = React.useState(0);
 
 	const [q, setQ] = React.useState("");
 	const [sport, setSport] = React.useState<SportKey>("all");
@@ -183,78 +195,89 @@ export default function CompetitionsPage(): React.JSX.Element {
 	const [dateTo, setDateTo] = React.useState("");
 	const qDebounced = useDebouncedValue(q, 350);
 
-	const [sourceRows, setSourceRows] = React.useState<Row[]>([]);
+	const [rows, setRows] = React.useState<Row[]>([]);
 	const [loading, setLoading] = React.useState(true);
 
 	const [confirmItem, setConfirmItem] = React.useState<Row | null>(null);
 	const [deleting, setDeleting] = React.useState(false);
 	const [toast, setToast] = React.useState<{ type: "success" | "error"; message: string } | null>(null);
 
-	const loadSource = React.useCallback(async () => {
-		const controller = new AbortController();
-		try {
-			setLoading(true);
-			const res = await listCompetitionsPage(1, 500, {}, "id-desc", controller.signal);
+	const reqIdRef = React.useRef(0);
 
-			const mapped: Row[] = res.data.map((c: CompetitionMasterDTO) => ({
-				id: c.id,
-				name: c.competition_name || `Giải đấu #${c.id}`,
-				sport: normalizeSportKey(c.sport_type),
-				city: c.city,
-				country: c.country,
-				start: c.start_date,
-				end: c.end_date,
-				isDemo: false,
-			}));
+	const fetchPage = React.useCallback(
+		async (uiPage: number, pageSize: number, signal?: AbortSignal) => {
+			const myReq = ++reqIdRef.current;
 
-			setSourceRows(mapped.length > 0 ? mapped : DEMO_ROWS);
-		} catch {
-			setSourceRows(DEMO_ROWS);
-		} finally {
-			setLoading(false);
-		}
-		return () => controller.abort();
-	}, []);
+			try {
+				setLoading(true);
+
+				const filters: Record<string, string | number | boolean | undefined> = {};
+
+				const apiSport = sportToApiValue(sport);
+				if (apiSport) filters.sport_type = apiSport;
+
+				const keyword = qDebounced.trim();
+				if (keyword) filters.q = keyword;
+
+				if (dateFrom) filters.start_date_from = dateFrom;
+				if (dateTo) filters.start_date_to = dateTo;
+
+				const res = await listCompetitionsPage(uiPage + 1, pageSize, filters, "id-desc", signal);
+
+				if (reqIdRef.current !== myReq) return;
+
+				const mapped = res.data.map(mapCompetitionToRow);
+
+				if (mapped.length > 0) {
+					setRows(mapped);
+					setTotal(res.total ?? mapped.length);
+				} else {
+					setRows([]);
+					setTotal(res.total ?? 0);
+				}
+			} catch (e: any) {
+				if (!isAbortError(e)) {
+					setRows(DEMO_ROWS);
+					setTotal(DEMO_ROWS.length);
+					setToast({
+						type: "error",
+						message: e?.response?.data?.message || e?.message || "Không thể tải danh sách giải đấu",
+					});
+				}
+			} finally {
+				if (reqIdRef.current === myReq) setLoading(false);
+			}
+		},
+		[qDebounced, sport, dateFrom, dateTo]
+	);
 
 	React.useEffect(() => {
-		loadSource();
-	}, [loadSource]);
+		const controller = new AbortController();
+
+		fetchPage(page, rowsPerPage, controller.signal);
+
+		return () => {
+			controller.abort();
+		};
+	}, [fetchPage, page, rowsPerPage]);
 
 	React.useEffect(() => {
 		setPage(0);
 	}, [qDebounced, sport, dateFrom, dateTo]);
 
-	const filteredRows = React.useMemo(() => {
-		return sourceRows.filter((row) => {
-			const okQ = qDebounced.trim()
-				? [row.name, row.city, row.country]
-						.filter(Boolean)
-						.join(" ")
-						.toLowerCase()
-						.includes(qDebounced.trim().toLowerCase())
-				: true;
-
-			const okSport = sport === "all" ? true : row.sport === sport;
-			const okDate = matchesDateRange(row, dateFrom || undefined, dateTo || undefined);
-
-			return okQ && okSport && okDate;
-		});
-	}, [sourceRows, qDebounced, sport, dateFrom, dateTo]);
-
-	React.useEffect(() => {
-		const maxPage = Math.max(0, Math.ceil(filteredRows.length / rowsPerPage) - 1);
-		if (page > maxPage) setPage(maxPage);
-	}, [filteredRows.length, page, rowsPerPage]);
-
-	const pagedRows = React.useMemo(() => {
-		const start = page * rowsPerPage;
-		return filteredRows.slice(start, start + rowsPerPage);
-	}, [filteredRows, page, rowsPerPage]);
-
 	const goEdit = (id: number, isDemo?: boolean) => {
 		if (isDemo) return;
 		router.push(`/dashboard/competitions/update/${id}`);
 	};
+
+	const reloadCurrentPage = React.useCallback(() => {
+		const nextTotal = Math.max(0, total - 1);
+		const maxPage = Math.max(0, Math.ceil(nextTotal / rowsPerPage) - 1);
+		const nextPage = page > maxPage ? maxPage : page;
+
+		setPage(nextPage);
+		fetchPage(nextPage, rowsPerPage);
+	}, [fetchPage, page, rowsPerPage, total]);
 
 	const onConfirmDelete = async () => {
 		if (!confirmItem) return;
@@ -263,18 +286,23 @@ export default function CompetitionsPage(): React.JSX.Element {
 			setDeleting(true);
 
 			if (confirmItem.isDemo) {
-				setSourceRows((prev) => prev.filter((item) => item.id !== confirmItem.id));
+				setRows((prev) => prev.filter((item) => item.id !== confirmItem.id));
+				setTotal((prev) => Math.max(0, prev - 1));
 				setToast({ type: "success", message: "Đã xóa dữ liệu demo" });
 				setConfirmItem(null);
 				return;
 			}
 
 			await deleteCompetitionById(confirmItem.id);
-			setSourceRows((prev) => prev.filter((item) => item.id !== confirmItem.id));
+
 			setToast({ type: "success", message: "Đã xóa giải đấu" });
 			setConfirmItem(null);
+			reloadCurrentPage();
 		} catch (e: any) {
-			setToast({ type: "error", message: e?.response?.data?.message || e?.message || "Không thể xóa giải đấu" });
+			setToast({
+				type: "error",
+				message: e?.response?.data?.message || e?.message || "Không thể xóa giải đấu",
+			});
 		} finally {
 			setDeleting(false);
 		}
@@ -368,8 +396,8 @@ export default function CompetitionsPage(): React.JSX.Element {
 										</Box>
 									</TableCell>
 								</TableRow>
-							) : pagedRows.length > 0 ? (
-								pagedRows.map((row) => (
+							) : rows.length > 0 ? (
+								rows.map((row) => (
 									<TableRow
 										key={row.id}
 										hover
@@ -411,6 +439,7 @@ export default function CompetitionsPage(): React.JSX.Element {
 														</IconButton>
 													</span>
 												</Tooltip>
+
 												<Tooltip title="Xóa">
 													<IconButton size="small" color="error" onClick={() => setConfirmItem(row)}>
 														<Trash />
@@ -435,12 +464,12 @@ export default function CompetitionsPage(): React.JSX.Element {
 
 				<TablePagination
 					component="div"
-					count={filteredRows.length}
+					count={total}
 					page={page}
 					rowsPerPage={rowsPerPage}
 					onPageChange={(_, p) => setPage(p)}
 					onRowsPerPageChange={(e) => {
-						setRowsPerPage(parseInt(e.target.value, 10));
+						setRowsPerPage(Number.parseInt(e.target.value, 10));
 						setPage(0);
 					}}
 					rowsPerPageOptions={[5, 10, 25, 50]}

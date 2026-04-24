@@ -1,14 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
 	Box,
-	Button,
 	Card,
 	CardActionArea,
 	CardContent,
-	CardMedia,
 	Divider,
 	MenuItem,
 	Link as MLink,
@@ -23,8 +21,6 @@ import {
 	TextField,
 	Typography,
 } from "@mui/material";
-import { GearSix as GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix";
-import { Plus as PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 
 type NewsItem = {
 	id: string;
@@ -208,8 +204,35 @@ const docsAll: DocItem[] = [
 	},
 ];
 
-export default function ExecutivePage() {
-	const router = useRouter();
+function NewsImage({
+	src,
+	alt,
+	priority = false,
+	sizes = "(max-width: 768px) 100vw, 50vw",
+	sx,
+}: {
+	src: string;
+	alt: string;
+	priority?: boolean;
+	sizes?: string;
+	sx?: object;
+}) {
+	return (
+		<Box
+			sx={{
+				position: "relative",
+				width: "100%",
+				overflow: "hidden",
+				bgcolor: "grey.100",
+				...sx,
+			}}
+		>
+			<Image src={src} alt={alt} fill priority={priority} sizes={sizes} style={{ objectFit: "cover" }} />
+		</Box>
+	);
+}
+
+export default function ExecutivePage(): React.JSX.Element {
 	const [keyword, setKeyword] = React.useState("");
 	const [from, setFrom] = React.useState("");
 	const [to, setTo] = React.useState("");
@@ -221,37 +244,49 @@ export default function ExecutivePage() {
 		setPage(0);
 	}, [keyword, from, to, sort]);
 
-	const inRange = (d?: string) => {
-		if (!d) return true;
-		const t = new Date(d).getTime();
-		if (from) {
-			const f = new Date(from);
-			f.setHours(0, 0, 0, 0);
-			if (t < f.getTime()) return false;
-		}
-		if (to) {
-			const e = new Date(to);
-			e.setHours(23, 59, 59, 999);
-			if (t > e.getTime()) return false;
-		}
-		return true;
-	};
+	const inRange = React.useCallback(
+		(d?: string) => {
+			if (!d) return true;
+
+			const t = new Date(d).getTime();
+
+			if (from) {
+				const f = new Date(from);
+				f.setHours(0, 0, 0, 0);
+				if (t < f.getTime()) return false;
+			}
+
+			if (to) {
+				const e = new Date(to);
+				e.setHours(23, 59, 59, 999);
+				if (t > e.getTime()) return false;
+			}
+
+			return true;
+		},
+		[from, to]
+	);
 
 	const allNews = React.useMemo(() => [featuredSeed, ...subNewsSeed, directiveMainSeed, ...directiveSideSeed], []);
 
 	const newsFiltered = React.useMemo(() => {
-		const byKW = (n: NewsItem) =>
-			keyword
-				? (n.title + " " + (n.summary || "") + " " + (n.tag || "")).toLowerCase().includes(keyword.toLowerCase())
-				: true;
-		const arr = allNews.filter((n) => byKW(n) && inRange(n.date));
-		arr.sort((a, b) => {
-			const ta = new Date(a.date || 0).getTime();
-			const tb = new Date(b.date || 0).getTime();
-			return sort === "desc" ? tb - ta : ta - tb;
-		});
-		return arr;
-	}, [allNews, keyword, from, to, sort]);
+		const keywordLower = keyword.trim().toLowerCase();
+
+		const byKW = (n: NewsItem) => {
+			if (!keywordLower) return true;
+
+			return `${n.title} ${n.summary || ""} ${n.tag || ""}`.toLowerCase().includes(keywordLower);
+		};
+
+		return allNews
+			.filter((n) => byKW(n) && inRange(n.date))
+			.sort((a, b) => {
+				const ta = new Date(a.date || 0).getTime();
+				const tb = new Date(b.date || 0).getTime();
+
+				return sort === "desc" ? tb - ta : ta - tb;
+			});
+	}, [allNews, keyword, inRange, sort]);
 
 	const featured = newsFiltered[0] ?? featuredSeed;
 	const subNews = newsFiltered.slice(1, 4).length ? newsFiltered.slice(1, 4) : subNewsSeed;
@@ -259,8 +294,14 @@ export default function ExecutivePage() {
 	const directiveSide = newsFiltered.slice(5, 8).length ? newsFiltered.slice(5, 8) : directiveSideSeed;
 
 	const docsFiltered = React.useMemo(() => {
-		const byKW = (d: DocItem) =>
-			keyword ? (d.code + " " + d.excerpt + " " + (d.sport || "")).toLowerCase().includes(keyword.toLowerCase()) : true;
+		const keywordLower = keyword.trim().toLowerCase();
+
+		const byKW = (d: DocItem) => {
+			if (!keywordLower) return true;
+
+			return `${d.code} ${d.excerpt} ${d.sport || ""}`.toLowerCase().includes(keywordLower);
+		};
+
 		return docsAll
 			.filter((d) => byKW(d) && inRange(d.date))
 			.sort((a, b) =>
@@ -268,7 +309,7 @@ export default function ExecutivePage() {
 					? new Date(b.date).getTime() - new Date(a.date).getTime()
 					: new Date(a.date).getTime() - new Date(b.date).getTime()
 			);
-	}, [keyword, from, to, sort]);
+	}, [keyword, inRange, sort]);
 
 	const rows = React.useMemo(
 		() => docsFiltered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
@@ -293,6 +334,7 @@ export default function ExecutivePage() {
 						onChange={(e) => setKeyword(e.target.value)}
 						sx={{ flex: 1, minWidth: 220 }}
 					/>
+
 					<TextField
 						fullWidth
 						size="small"
@@ -303,6 +345,7 @@ export default function ExecutivePage() {
 						onChange={(e) => setFrom(e.target.value)}
 						sx={{ flex: 1, minWidth: 160 }}
 					/>
+
 					<TextField
 						fullWidth
 						size="small"
@@ -313,6 +356,7 @@ export default function ExecutivePage() {
 						onChange={(e) => setTo(e.target.value)}
 						sx={{ flex: 1, minWidth: 160 }}
 					/>
+
 					<TextField
 						fullWidth
 						size="small"
@@ -338,21 +382,23 @@ export default function ExecutivePage() {
 			<Stack direction={{ xs: "column", md: "row" }} spacing={3} alignItems="stretch">
 				<Card sx={{ flex: 7, borderRadius: 2, overflow: "hidden" }}>
 					<CardActionArea component="a" href={featured.href}>
-						<CardMedia
-							component="img"
-							loading="lazy"
-							image={featured.image}
+						<NewsImage
+							src={featured.image}
 							alt={featured.title}
-							sx={{ height: { xs: 220, md: 380 }, objectFit: "cover" }}
+							priority
+							sizes="(max-width: 768px) 100vw, 58vw"
+							sx={{ height: { xs: 220, md: 380 } }}
 						/>
 					</CardActionArea>
 				</Card>
+
 				<Stack flex={5} justifyContent="center" spacing={1.5}>
 					<Typography variant="h4" fontWeight={800} lineHeight={1.2}>
 						<MLink href={featured.href} underline="none" color="inherit">
 							{featured.title}
 						</MLink>
 					</Typography>
+
 					<Typography variant="body2" color="text.secondary">
 						{featured.source ? `(${featured.source}) — ` : ""}
 						{featured.summary}
@@ -364,13 +410,8 @@ export default function ExecutivePage() {
 				{subNews.map((n) => (
 					<Card key={n.id} sx={{ flex: 1, borderRadius: 2, overflow: "hidden" }}>
 						<CardActionArea component="a" href={n.href}>
-							<CardMedia
-								component="img"
-								loading="lazy"
-								image={n.image}
-								alt={n.title}
-								sx={{ height: 200, objectFit: "cover" }}
-							/>
+							<NewsImage src={n.image} alt={n.title} sizes="(max-width: 768px) 100vw, 33vw" sx={{ height: 200 }} />
+
 							<CardContent>
 								<Typography variant="h6" fontWeight={800} lineHeight={1.3}>
 									{n.title}
@@ -392,13 +433,13 @@ export default function ExecutivePage() {
 				<Stack direction={{ xs: "column", md: "row" }} spacing={3}>
 					<Card sx={{ flex: 7, borderRadius: 2, overflow: "hidden" }}>
 						<CardActionArea component="a" href={directiveMain.href}>
-							<CardMedia
-								component="img"
-								loading="lazy"
-								image={directiveMain.image}
+							<NewsImage
+								src={directiveMain.image}
 								alt={directiveMain.title}
-								sx={{ height: { xs: 220, md: 360 }, objectFit: "cover" }}
+								sizes="(max-width: 768px) 100vw, 58vw"
+								sx={{ height: { xs: 220, md: 360 } }}
 							/>
+
 							<CardContent>
 								<Typography variant="h5" fontWeight={800} lineHeight={1.25}>
 									{directiveMain.title}
@@ -412,26 +453,22 @@ export default function ExecutivePage() {
 							<Stack key={n.id} direction="row" spacing={2} alignItems="center">
 								<Card sx={{ width: 120, height: 80, borderRadius: 1.5, overflow: "hidden", flexShrink: 0 }}>
 									<CardActionArea component="a" href={n.href}>
-										<CardMedia
-											component="img"
-											loading="lazy"
-											image={n.image}
-											alt={n.title}
-											sx={{ width: "100%", height: "100%", objectFit: "cover" }}
-										/>
+										<NewsImage src={n.image} alt={n.title} sizes="120px" sx={{ height: 80 }} />
 									</CardActionArea>
 								</Card>
+
 								<Box sx={{ minWidth: 0 }}>
 									<Typography variant="subtitle1" fontWeight={800} lineHeight={1.25}>
 										<MLink href={n.href} underline="none" color="inherit">
 											{n.title}
 										</MLink>
 									</Typography>
-									{n.tag && (
+
+									{n.tag ? (
 										<Typography variant="caption" color="text.secondary">
 											{n.tag}
 										</Typography>
-									)}
+									) : null}
 								</Box>
 							</Stack>
 						))}
@@ -458,6 +495,7 @@ export default function ExecutivePage() {
 									<TableCell sx={{ fontWeight: 700, width: 160 }}>Tài liệu đính kèm</TableCell>
 								</TableRow>
 							</TableHead>
+
 							<TableBody>
 								{rows.map((d) => (
 									<TableRow key={d.id} hover>
@@ -466,10 +504,15 @@ export default function ExecutivePage() {
 												{d.code}
 											</MLink>
 										</TableCell>
+
 										<TableCell>
-											{new Date(d.date).toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
+											{new Date(d.date).toLocaleDateString("vi-VN", {
+												timeZone: "Asia/Ho_Chi_Minh",
+											})}
 										</TableCell>
+
 										<TableCell>{d.excerpt}</TableCell>
+
 										<TableCell>
 											{d.fileUrl ? (
 												<MLink href={d.fileUrl} underline="hover">
@@ -481,7 +524,8 @@ export default function ExecutivePage() {
 										</TableCell>
 									</TableRow>
 								))}
-								{rows.length === 0 && (
+
+								{rows.length === 0 ? (
 									<TableRow>
 										<TableCell colSpan={4}>
 											<Box p={3} textAlign="center" color="text.secondary">
@@ -489,7 +533,7 @@ export default function ExecutivePage() {
 											</Box>
 										</TableCell>
 									</TableRow>
-								)}
+								) : null}
 							</TableBody>
 						</Table>
 					</Box>
@@ -501,7 +545,7 @@ export default function ExecutivePage() {
 						rowsPerPage={rowsPerPage}
 						onPageChange={(_, newPage) => setPage(newPage)}
 						onRowsPerPageChange={(e) => {
-							setRowsPerPage(parseInt(e.target.value, 10));
+							setRowsPerPage(Number.parseInt(e.target.value, 10));
 							setPage(0);
 						}}
 						rowsPerPageOptions={[6, 10, 25]}

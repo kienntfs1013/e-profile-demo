@@ -84,20 +84,25 @@ export function getLoggedInUserId(): number | null {
 
 function toQuery(filters?: Record<string, string | number | boolean | undefined>, orderby?: string) {
 	const params = new URLSearchParams();
+
 	if (filters) {
 		Object.entries(filters).forEach(([k, v]) => {
 			if (v !== undefined && v !== null && v !== "") params.append(k, String(v));
 		});
 	}
+
 	if (orderby) params.append("orderby", orderby);
+
 	return params;
 }
 
 function compact<T extends Record<string, any>>(obj: T): T {
 	const out: any = {};
+
 	Object.entries(obj).forEach(([k, v]) => {
 		if (v !== undefined && v !== null) out[k] = v;
 	});
+
 	return out;
 }
 
@@ -105,53 +110,71 @@ export function fullName(u: Pick<UserDTO, "firstName" | "lastName" | "email">): 
 	const ln = u.lastName?.trim() ?? "";
 	const fn = u.firstName?.trim() ?? "";
 	const byName = [ln, fn].filter(Boolean).join(" ").trim();
+
 	if (byName) return byName;
+
 	return u.email ? u.email.split("@")[0] : "Người dùng";
 }
 
 export function calcAge(birthday?: string): number | undefined {
 	if (!birthday) return undefined;
+
 	const d = new Date(birthday);
-	if (isNaN(+d)) return undefined;
+
+	if (Number.isNaN(+d)) return undefined;
+
 	const now = new Date();
 	let age = now.getFullYear() - d.getFullYear();
 	const m = now.getMonth() - d.getMonth();
+
 	if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+
 	return age;
 }
 
 export function extractRoleId(role?: UserDTO["role"]): number | undefined {
 	const r = role as any;
+
 	if (typeof r === "number") return r;
+
 	if (typeof r === "string") {
 		const n = Number(r);
 		return Number.isNaN(n) ? undefined : n;
 	}
+
 	if (r && typeof r === "object") {
 		const id = r.id ?? (typeof r === "object" ? (r as any).id : undefined);
 		const n = Number(id);
 		return Number.isNaN(n) ? undefined : n;
 	}
+
 	return undefined;
 }
 
 export type NormalizedGender = "Nam" | "Nữ" | "Khác" | "-";
+
 export function normalizeGender(input?: string | number | null): NormalizedGender {
 	if (input === undefined || input === null) return "-";
+
 	const v = String(input).toLowerCase().trim();
+
 	if (["nam", "male", "m", "1"].includes(v)) return "Nam";
 	if (["nữ", "nu", "female", "f", "0", "2"].includes(v)) return "Nữ";
+
 	return "Khác";
 }
 
 export type SportCode = "shooting" | "archery" | "taekwondo" | "boxing" | "";
+
 export function normalizeSport(input?: string): SportCode {
 	const s = (input || "").toLowerCase().trim();
+
 	if (!s) return "";
 	if (s.includes("shoot") || s.includes("bắn súng") || s.includes("ban sung")) return "shooting";
 	if (s.includes("arch") || s.includes("bắn cung") || s.includes("ban cung")) return "archery";
 	if (s.includes("taek")) return "taekwondo";
 	if (s.includes("box")) return "boxing";
+
 	return "";
 }
 
@@ -162,8 +185,11 @@ export async function listUsers(
 	const params = toQuery(filters, orderby);
 	const qs = params.toString();
 	const url = qs ? `/api/Users?${qs}` : "/api/Users";
+
 	const { data } = await api.get<ListResponse<UserDTO>>(url);
+
 	if (data.status !== "success") throw new Error(data.message || "List Users failed");
+
 	return data.data;
 }
 
@@ -175,12 +201,45 @@ export async function listUsersPage(
 	signal?: AbortSignal
 ): Promise<PagedListResponse<UserDTO>> {
 	const params = toQuery(filters, orderby);
-	params.append("page", String(page));
-	if (limit !== undefined && limit !== null) params.append("limit", String(limit));
+
+	params.set("page", String(page));
+
+	if (limit !== undefined && limit !== null) {
+		params.set("limit", String(limit));
+	}
+
 	const qs = params.toString();
 	const url = qs ? `/api/Users?${qs}` : "/api/Users";
+
 	const { data } = await api.get<PagedListResponse<UserDTO>>(url, { signal });
+
 	if (data.status !== "success") throw new Error(data.message || "List Users failed");
+
+	return data;
+}
+
+export async function listUsersPaged(params: {
+	page?: number;
+	limit?: number;
+	filters?: Record<string, string | number | boolean | undefined>;
+	orderby?: string;
+	signal?: AbortSignal;
+}): Promise<PagedListResponse<UserDTO>> {
+	const { page = 1, limit = DEFAULT_PAGE_LIMIT, filters, orderby, signal } = params;
+
+	const query = toQuery(filters, orderby);
+
+	query.set("page", String(page));
+	query.set("limit", String(limit));
+
+	const { data } = await api.get<PagedListResponse<UserDTO>>(`/api/Users?${query.toString()}`, {
+		signal,
+	});
+
+	if (data.status !== "success") {
+		throw new Error(data.message || "List Users failed");
+	}
+
 	return data;
 }
 
@@ -191,16 +250,24 @@ export async function listAllUsers(
 	const first = await listUsersPage(1, filters, orderby, DEFAULT_PAGE_LIMIT);
 	const totalpage = Math.max(1, first.totalpage ?? 1);
 	const out: UserDTO[] = [...first.data];
-	for (let p = 2; p <= totalpage; p += 1) {
-		const res = await listUsersPage(p, filters, orderby, DEFAULT_PAGE_LIMIT);
+
+	if (totalpage <= 1) return out;
+
+	const pages = Array.from({ length: totalpage - 1 }, (_, i) => i + 2);
+	const results = await Promise.all(pages.map((p) => listUsersPage(p, filters, orderby, DEFAULT_PAGE_LIMIT)));
+
+	results.forEach((res) => {
 		out.push(...res.data);
-	}
+	});
+
 	return out;
 }
 
 export async function fetchUserByIdFromList(id: number): Promise<UserDTO | null> {
 	const { data } = await api.get<ListResponse<UserDTO>>("/api/Users?orderby=id-asc");
+
 	if (data.status !== "success") throw new Error(data.message || "Fetch Users failed");
+
 	return data.data.find((u) => u.id === id) ?? null;
 }
 
@@ -211,25 +278,33 @@ export async function getUserById(
 	opts?: { useCache?: boolean; signal?: AbortSignal }
 ): Promise<UserDTO | null> {
 	const useCache = opts?.useCache !== false;
+
 	if (useCache) {
 		const hit = _userCache.get(id);
+
 		if (hit && Date.now() - hit.at < USER_CACHE_TTL_MS) return hit.data;
 	}
+
 	const { data } = await api.get<ItemResponse<UserDTO>>(`/api/Users/${id}`, { signal: opts?.signal });
 	const ok = data.status === "success";
 	const val = ok ? data.data : null;
+
 	if (useCache) _userCache.set(id, { at: Date.now(), data: val });
+
 	return val;
 }
 
 export async function fetchAthleteByUserId(userId: number): Promise<AthleteDTO | null> {
 	const { data } = await api.get<ListResponse<AthleteDTO>>(`/api/Athletes?user_id=${encodeURIComponent(userId)}`);
+
 	if (data.status !== "success") throw new Error(data.message || "Fetch Athletes failed");
+
 	return data.data[0] ?? null;
 }
 
 export function mapNationToCountry(nationCode: string): string | undefined {
 	if (nationCode === "VIE") return "Việt Nam";
+
 	return undefined;
 }
 
@@ -237,16 +312,20 @@ export function mapGenderToVN(g?: "male" | "female" | "other" | ""): string | un
 	if (!g) return undefined;
 	if (g === "male") return "Nam";
 	if (g === "female") return "Nữ";
+
 	return "Khác";
 }
 
 export function mapSportToVN(v?: string): string | undefined {
 	if (!v) return undefined;
+
 	const s = v.toLowerCase();
+
 	if (s === "archery") return "Bắn cung";
 	if (s === "shooting") return "Bắn súng";
 	if (s === "boxing") return "Boxing";
 	if (s === "taekwondo") return "Taekwondo";
+
 	return undefined;
 }
 
@@ -254,8 +333,10 @@ export function parseRoleToInt(role?: unknown): 1 | 2 | undefined {
 	const r = String(role ?? "")
 		.toLowerCase()
 		.trim();
+
 	if (r === "1" || r.includes("athlete") || r.includes("vận") || r.includes("van")) return 1;
 	if (r === "2" || r.includes("coach") || r.includes("huấn") || r.includes("huan")) return 2;
+
 	return undefined;
 }
 
@@ -276,7 +357,9 @@ export async function registerUser(
 		created_at: payload.created_at ?? new Date().toISOString().slice(0, 19).replace("T", " "),
 		...payload,
 	};
+
 	const { data } = await api.post<RegistryResponse>("/api/registry", body);
+
 	return { ok: data.status === "success", id: data.data, message: data.message };
 }
 
@@ -306,7 +389,9 @@ export async function updateUser(
 	> & { password?: string; access_role?: string; created_at?: string }
 ): Promise<{ ok: boolean; message?: string }> {
 	const body = compact(payload);
+
 	const { data } = await api.put<{ status: "success" | "error"; message?: string }>(`/api/Users/${id}`, body);
+
 	return { ok: data.status === "success", message: data.message };
 }
 
@@ -315,28 +400,37 @@ export async function updateUserByIdMerged(
 	patch: Partial<UserDTO> & { password?: string; access_role?: string }
 ): Promise<void> {
 	let current = await getUserById(userId);
+
 	if (!current) current = await fetchUserByIdFromList(userId);
 	if (!current) throw new Error("Không tìm thấy người dùng");
+
 	const merged: Record<string, any> = { ...current, ...patch };
+
 	delete merged.id;
 	delete merged.created_at;
 	delete merged.updated_at;
+
 	const body = compact(merged);
+
 	const { data } = await api.put<{ status: "success" | "error"; message?: string }>(`/api/Users/${userId}`, body);
+
 	if (data?.status !== "success") throw new Error(data?.message || "Cập nhật thất bại");
 }
 
 export async function deleteUser(id: number): Promise<{ ok: boolean; message?: string }> {
 	const { data } = await api.delete<{ status: "success" | "error"; message?: string }>(`/api/Users/${id}`);
+
 	return { ok: data.status === "success", message: data.message };
 }
 
 export async function changePassword(userId: number, oldpassword: string, newpassword: string): Promise<void> {
 	const token = getAccessToken();
+
 	const { data } = await api.post<{ status: "success" | "error"; message?: string }>(
 		"/api/change_password",
 		{ oldpassword, newpassword, user_id: userId },
 		token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
 	);
+
 	if (data.status !== "success") throw new Error(data.message || "Đổi mật khẩu thất bại");
 }
