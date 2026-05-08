@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
+/*
 import {
 	getIotDataByType,
 	getUserProfileByPhone,
@@ -11,6 +12,7 @@ import {
 	Spo2Row,
 	StepsRow,
 } from "@/services/gocare.service";
+*/
 import { getLoggedInUserId, getUserById } from "@/services/user.service";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -263,6 +265,7 @@ export default function Page(): React.JSX.Element {
 	const [sleepPie, setSleepPie] = React.useState<{ name: string; value: number }[]>([]);
 	const [metrics, setMetrics] = React.useState<Metric[]>([]);
 
+	/*
 	React.useEffect(() => {
 		setGoCareCredentials({
 			tenant: process.env.NEXT_PUBLIC_GOCARE_TENANT || "epr",
@@ -270,11 +273,19 @@ export default function Page(): React.JSX.Element {
 			partnerSecret: process.env.NEXT_PUBLIC_GOCARE_PARTNER_SECRET,
 		});
 	}, []);
+	*/
 
 	const fetchData = React.useCallback(async () => {
 		console.groupCollapsed("%c[HealthPage] fetchData", "color:#8b5cf6");
 		console.time("[HealthPage] fetchData");
 		try {
+			const fakeSeries = buildFakeSeries(startDate, endDate);
+			const last = fakeSeries[fakeSeries.length - 1] || {};
+			setSeries(fakeSeries);
+			setSleepPie(buildFakeSleepPie(fakeSeries));
+			setMetrics(buildMetricsFromLast(last));
+
+			/*
 			const startTime = new Date(startDate + "T00:00:00").getTime();
 			const endTime = new Date(endDate + "T23:59:59").getTime();
 
@@ -374,6 +385,7 @@ export default function Page(): React.JSX.Element {
 			setSeries(finalRows);
 			setSleepPie(buildFakeSleepPie(finalRows));
 			setMetrics(buildMetricsFromLast(last));
+			*/
 		} catch {
 			const fakeSeries = buildFakeSeries(startDate, endDate);
 			const last = fakeSeries[fakeSeries.length - 1] || {};

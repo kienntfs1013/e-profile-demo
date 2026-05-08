@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { getIotDataByPhone, HrRow, setGoCareCredentials, SleepRow, Spo2Row, StepsRow } from "@/services/gocare.service";
+// import { getIotDataByPhone, HrRow, setGoCareCredentials, SleepRow, Spo2Row, StepsRow } from "@/services/gocare.service";
 import { fetchUserByIdFromList, getLoggedInUserId, getUserById, type UserDTO } from "@/services/user.service";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -403,6 +403,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 	const [loading, setLoading] = React.useState(false);
 	const [user, setUser] = React.useState<(UserDTO & Extra) | null>(null);
 
+	/*
 	React.useEffect(() => {
 		setGoCareCredentials({
 			baseURL: process.env.NEXT_PUBLIC_GOCARE_API || "https://portal.gocare.vn/api",
@@ -411,6 +412,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 			partnerSecret: process.env.NEXT_PUBLIC_GOCARE_PARTNER_SECRET,
 		});
 	}, []);
+	*/
 
 	React.useEffect(() => {
 		let off = false;
@@ -435,26 +437,31 @@ export function HealthSection({ id }: { id?: number | string }) {
 	}, [id]);
 
 	const fetchData = React.useCallback(async () => {
-		const viewerId = getLoggedInUserId?.();
-		const targetUserId = id != null && !Number.isNaN(Number(id)) ? Number(id) : viewerId || undefined;
-
 		const end = new Date(date + "T23:59:59").getTime();
 		const days = range === "7d" ? 7 : 30;
 		const start = startOfDayMs(new Date(end - (days - 1) * 24 * 60 * 60 * 1000));
 
-		const phoneDigits = await resolvePhoneFromUserDetail(targetUserId);
-		const phone = phoneDigits ? toE164(phoneDigits, process.env.NEXT_PUBLIC_GOCARE_PHONE_PREFIX || "84") : "";
-
-		if (!phone) {
+		setLoading(true);
+		try {
 			const fake = buildFakeSeries(days, start);
 			setSeries(fake);
 			setSleepPie(buildSleepPieFromSeries(fake));
 			setMetrics(buildMetricsFromSeries(fake[fake.length - 1] || { d: fmtDay(end), weightKg: 69.99 }));
-			return;
-		}
 
-		setLoading(true);
-		try {
+			/*
+			const viewerId = getLoggedInUserId?.();
+			const targetUserId = id != null && !Number.isNaN(Number(id)) ? Number(id) : viewerId || undefined;
+			const phoneDigits = await resolvePhoneFromUserDetail(targetUserId);
+			const phone = phoneDigits ? toE164(phoneDigits, process.env.NEXT_PUBLIC_GOCARE_PHONE_PREFIX || "84") : "";
+
+			if (!phone) {
+				const fake = buildFakeSeries(days, start);
+				setSeries(fake);
+				setSleepPie(buildSleepPieFromSeries(fake));
+				setMetrics(buildMetricsFromSeries(fake[fake.length - 1] || { d: fmtDay(end), weightKg: 69.99 }));
+				return;
+			}
+
 			const [hrs, spo2s, steps, sleeps] = await Promise.all([
 				getIotDataByPhone<"hr">("hr", phone, start, end),
 				getIotDataByPhone<"spo2">("spo2", phone, start, end),
@@ -525,6 +532,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 			setSeries(fixed);
 			setSleepPie(buildSleepPieFromSeries(fixed));
 			setMetrics(buildMetricsFromSeries(last));
+			*/
 		} catch {
 			const fake = buildFakeSeries(days, start);
 			setSeries(fake);
@@ -533,7 +541,7 @@ export function HealthSection({ id }: { id?: number | string }) {
 		} finally {
 			setLoading(false);
 		}
-	}, [id, date, range]);
+	}, [date, range]);
 
 	React.useEffect(() => {
 		fetchData();
