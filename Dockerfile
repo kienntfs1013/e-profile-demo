@@ -5,32 +5,43 @@ FROM node:${NODE_VERSION}-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
 
 # ----- Build stage -----
 FROM node:${NODE_VERSION}-alpine AS builder
+
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Chạy build (nếu fail thì container không chạy được, nên KHÔNG dùng || true)
 RUN npm run build
 
 # ----- Production stage -----
 FROM node:${NODE_VERSION}-alpine AS runner
+
+RUN apk add --no-cache libc6-compat
+
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
 
-# Copy output cần thiết cho runtime
+RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
+
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+
+RUN chown -R nextjs:nodejs /app
+
+USER nextjs
 
 EXPOSE 3000
 
-# Chạy Next.js ở production mode
-CMD ["npm", "start"]
+CMD ["node", "server.js"]
