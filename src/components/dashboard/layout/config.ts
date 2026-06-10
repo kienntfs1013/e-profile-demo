@@ -3,6 +3,12 @@ import { paths } from "@/paths";
 
 export const navItems = [
 	{
+		key: "administration",
+		title: "Quản trị hệ thống",
+		href: paths.dashboard.administration,
+		icon: "chart-pie",
+	},
+	{
 		key: "account",
 		title: "Tài khoản",
 		href: paths.dashboard.account,

@@ -88,6 +88,7 @@ export function MainNav(): React.JSX.Element {
 	const [openNav, setOpenNav] = React.useState<boolean>(false);
 	const userPopover = usePopover<HTMLDivElement>();
 	const [displayName, setDisplayName] = React.useState<string>("Người dùng");
+	const [email, setEmail] = React.useState<string | undefined>(undefined);
 	const [avatarSrc, setAvatarSrc] = React.useState<string | undefined>(undefined);
 
 	React.useEffect(() => {
@@ -123,6 +124,7 @@ export function MainNav(): React.JSX.Element {
 
 				if (!cancelled) {
 					setDisplayName(fullName);
+					setEmail(user.email || localAuth.email);
 					setAvatarSrc(avatar);
 				}
 			} catch {}
@@ -168,8 +170,14 @@ export function MainNav(): React.JSX.Element {
 				</Stack>
 			</Box>
 
-			{/* <UserPopover anchorEl={userPopover.anchorRef.current} onClose={userPopover.handleClose} open={userPopover.open} /> */}
-			{/* <MobileNav onClose={() => setOpenNav(false)} open={openNav} /> */}
+			<UserPopover
+				anchorEl={userPopover.anchorRef.current}
+				onClose={userPopover.handleClose}
+				open={userPopover.open}
+				name={displayName}
+				email={email}
+			/>
+			<MobileNav onClose={() => setOpenNav(false)} open={openNav} />
 		</>
 	);
 }
